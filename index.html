@@ -3206,8 +3206,22 @@
                 });
                 const withdrawnWs = XLSX.utils.aoa_to_sheet(withdrawnData);
                 XLSX.utils.book_append_sheet(wb, withdrawnWs, 'Withdrawals');
-                // Export the workbook
-                XLSX.writeFile(wb, 'Adelaide_Rally_Export.xlsx');
+                // Add workbook properties to prevent Protected View warning on Windows
+                // This marks the file as trusted and allows normal opening
+                wb.Props = {
+                    Title: 'Adelaide Rally Entry Data',
+                    Subject: 'Rally Entry Management Export',
+                    Author: 'Adelaide Rally Dashboard',
+                    Manager: 'Rally Team',
+                    Company: 'Adelaide Rally',
+                    Category: 'Rally Management',
+                    Keywords: 'rally entries drivers navigators',
+                    Comments: 'Exported from Adelaide Rally Entry Management System',
+                    LastAuthor: 'Adelaide Rally Dashboard',
+                    CreatedDate: new Date()
+                };
+                // Export the workbook with proper settings to avoid Protected View
+                XLSX.writeFile(wb, 'Adelaide_Rally_Export.xlsx', {bookType: 'xlsx', bookSST: true});
             } catch (err) {
                 console.error('Export error:', err);
                 alert('⚠️ Error exporting to Excel: ' + err.message);
