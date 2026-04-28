@@ -2362,8 +2362,8 @@
         let dropboxSyncTimer = null;
         let dropboxDbx = null;
         let lastSyncTimestamp = 0;
-        const DROPBOX_SYNC_INTERVAL = 5000; // Auto-sync every 5 seconds
-        const DROPBOX_STATE_FILE = '/AdelaideRallyState.json';
+        const DROPBOX_SYNC_INTERVAL = 10000; // Auto-sync every 10 seconds
+        const DROPBOX_STATE_FILE = '/Massive Events Corp Folders/Adelaide Rally 2026/03. Dashboard/AdelaideRallyState.json';
         async function initDropboxSync() {
             try {
                 // Use hardcoded token - ensure it's set in localStorage for later use
@@ -2420,11 +2420,15 @@
                     body: JSON.stringify(state)
                 });
                 if (response.ok) {
-                    console.log('✓ Synced to Dropbox');
+                    const responseData = await response.json();
+                    console.log('✓ Synced to Dropbox at:', DROPBOX_STATE_FILE);
+                    console.log('Response:', responseData);
                     lastSyncTimestamp = Date.now();
                 } else {
                     const errorText = await response.text();
-                    console.warn('⚠ Dropbox sync failed:', response.status, errorText);
+                    console.warn('⚠ Dropbox sync failed:', response.status);
+                    console.warn('File path attempted:', DROPBOX_STATE_FILE);
+                    console.warn('Error details:', errorText);
                 }
             } catch (error) {
                 console.warn('⚠ Error syncing to Dropbox:', error.message);
@@ -2455,7 +2459,7 @@
                     if (state.disclaimerLocked) disclaimerLocked = state.disclaimerLocked;
                     if (state.withdrawn) withdrawn = new Set(state.withdrawn);
                     if (state.navigationMarryEntries) navigationMarryEntries = state.navigationMarryEntries;
-                    console.log('✓ Synced from Dropbox');
+                    console.log('✓ Synced from Dropbox - Loaded', csvData.length, 'entries');
                     lastSyncTimestamp = Date.now();
                     // Refresh current view if CSV was uploaded
                     if (currentView === 'doc-chase' || currentView === 'nav-mary') {
