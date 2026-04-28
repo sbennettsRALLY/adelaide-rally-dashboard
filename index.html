@@ -509,7 +509,7 @@
                 </div>
                 <button class="file-upload-btn" id="uploadBtn">📤 Upload CSV</button>
                 <input type="file" id="csvInput" class="file-input" accept=".csv" />
-                <button class="file-upload-btn" id="exportExcelBtn" onclick="exportToSharePoint()">📊 Export to SharePoint</button>
+                <button class="file-upload-btn" id="exportExcelBtn" onclick="exportToExcel()">📊 Export to Excel</button>
                 <button class="file-upload-btn" id="openExcelOnlineBtn" onclick="openExcelOnline()" title="Open in browser-based Excel (no download needed, no Windows security issues)">☁️ Open in Excel Online</button>
             </div>
         </div>
@@ -3222,23 +3222,76 @@
                 };
                 // Generate binary file with maximum compatibility for Windows Excel
                 const wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
-                // Create blob and download via manual blob approach (avoids Protected View issues)
+                // Create blob
                 const blob = new Blob([wbout], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                const fileName = `Adelaide_Rally_Export_${timestamp}.xlsx`;
+
+                // Download to user's computer first
+                await downloadExcelFile(blob, fileName);
+
+                // Then upload to Dropbox as backup
+                await uploadExcelToDropbox(blob, fileName);
+            } catch (err) {
+                console.error('Export error:', err);
+                alert('⚠️ Error exporting to Excel: ' + err.message);
+            }
+        }
+
+        // Download Excel file to user's computer
+        function downloadExcelFile(blob, fileName) {
+            return new Promise((resolve) => {
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = 'Adelaide_Rally_Export.xlsx';
-                // Append, click, and clean up immediately
+                link.download = fileName;
                 document.body.appendChild(link);
                 link.click();
+
                 // Clean up
                 setTimeout(() => {
                     document.body.removeChild(link);
                     URL.revokeObjectURL(url);
+                    resolve();
                 }, 100);
+            });
+        }
+
+        // Upload Excel file to Dropbox as backup
+        async function uploadExcelToDropbox(blob, fileName) {
+            const dropboxToken = localStorage.getItem('dropbox_access_token');
+
+            if (!dropboxToken) {
+                showMessage('docMsg', 'success', `✓ File downloaded: ${fileName}`);
+                return;
+            }
+
+            try {
+                showMessage('docMsg', 'info', '✓ File downloaded. Backing up to Dropbox...');
+
+                const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${dropboxToken}`,
+                        'Dropbox-API-Arg': JSON.stringify({
+                            path: `/Adelaide Rally Exports/${fileName}`,
+                            mode: 'add',
+                            autorename: true
+                        }),
+                        'Content-Type': 'application/octet-stream'
+                    },
+                    body: blob
+                });
+
+                if (response.ok) {
+                    showMessage('docMsg', 'success', `✓ Downloaded and backed up to Dropbox: ${fileName}`);
+                } else {
+                    showMessage('docMsg', 'success', `✓ Downloaded to your computer: ${fileName}<br>⚠️ Dropbox backup failed (but file was saved locally)`);
+                }
             } catch (err) {
-                console.error('Export error:', err);
-                alert('⚠️ Error exporting to Excel: ' + err.message);
+                console.error('Dropbox backup error:', err);
+                showMessage('docMsg', 'success', `✓ Downloaded to your computer: ${fileName}<br>⚠️ Dropbox backup failed (but file was saved locally)`);
             }
         }
         function openExcelOnline() {
@@ -3348,11 +3401,35 @@
             const params = new URLSearchParams(window.location.search);
             const code = params.get('code');
             const state = params.get('state');
+            const error = params.get('error');
+            const errorDescription = params.get('error_description');
 
-            if (code && state) {
-                const storedState = sessionStorage.getItem('sharepoint_oauth_state');
-                if (state === storedState) {
-                    exchangeCodeForToken(code);
+            // Check if this is a popup window
+            const isPopup = window.opener && window.opener !== window;
+
+            if (isPopup) {
+                // Send auth result back to parent window
+                if (code && state) {
+                    window.opener.postMessage({
+                        type: 'SHAREPOINT_AUTH_CODE',
+                        code: code,
+                        state: state
+                    }, window.location.origin);
+                    window.document.body.innerHTML = '<p style="padding: 20px; font-family: Arial;">Authentication successful. You can close this window.</p>';
+                } else if (error) {
+                    window.opener.postMessage({
+                        type: 'SHAREPOINT_AUTH_CODE',
+                        error: errorDescription || error
+                    }, window.location.origin);
+                    window.document.body.innerHTML = `<p style="padding: 20px; font-family: Arial; color: red;">Error: ${errorDescription || error}</p>`;
+                }
+            } else {
+                // Not a popup, handle normally (for main page loads)
+                if (code && state) {
+                    const storedState = sessionStorage.getItem('sharepoint_oauth_state');
+                    if (state === storedState) {
+                        exchangeCodeForToken(code);
+                    }
                 }
             }
         }
@@ -3380,7 +3457,7 @@
                 });
         }
 
-        // Initiate SharePoint OAuth login flow
+        // Initiate SharePoint OAuth login flow in a popup window
         async function initiateSharePointOAuth() {
             const pkce = await generatePKCE();
             const state = Math.random().toString(36).substring(7);
@@ -3397,7 +3474,33 @@
                 `code_challenge=${pkce.challenge}&` +
                 `code_challenge_method=S256`;
 
-            window.location.href = authUrl;
+            // Open login in a popup window (800x600)
+            const popupWindow = window.open(authUrl, 'SharePointLogin', 'width=800,height=600,toolbar=no,menubar=no');
+
+            // Listen for postMessage from the popup with the auth code
+            const messageListener = (event) => {
+                if (event.origin !== window.location.origin) return;
+
+                if (event.data && event.data.type === 'SHAREPOINT_AUTH_CODE') {
+                    window.removeEventListener('message', messageListener);
+                    if (event.data.code) {
+                        exchangeCodeForToken(event.data.code);
+                    } else if (event.data.error) {
+                        showMessage('docMsg', 'error', `⚠️ Authentication error: ${event.data.error}`);
+                    }
+                    // Close the popup
+                    if (popupWindow && !popupWindow.closed) {
+                        popupWindow.close();
+                    }
+                }
+            };
+
+            window.addEventListener('message', messageListener);
+
+            // Timeout cleanup after 10 minutes
+            setTimeout(() => {
+                window.removeEventListener('message', messageListener);
+            }, 600000);
         }
 
         // Exchange authorization code for access token
@@ -3413,6 +3516,8 @@
                 scope: SHAREPOINT_CONFIG.scope
             };
 
+            showMessage('docMsg', 'info', 'Exchanging authorization code for token...');
+
             fetch(`https://login.microsoftonline.com/${SHAREPOINT_CONFIG.tenantId}/oauth2/v2.0/token`, {
                 method: 'POST',
                 headers: {
@@ -3427,13 +3532,18 @@
                     localStorage.setItem('sharepoint_token_expiry', Date.now() + (data.expires_in * 1000));
                     window.history.replaceState({}, document.title, window.location.pathname);
                     showMessage('docMsg', 'success', '✓ Connected to SharePoint successfully!');
+                } else if (data.error) {
+                    console.error('Token error response:', data);
+                    const errorMsg = data.error_description || data.error;
+                    showMessage('docMsg', 'error', `⚠️ Authentication failed: ${errorMsg}`);
                 } else {
-                    showMessage('docMsg', 'error', '⚠️ Failed to authenticate with SharePoint');
+                    console.error('Unexpected token response:', data);
+                    showMessage('docMsg', 'error', '⚠️ Failed to authenticate with SharePoint (unexpected response)');
                 }
             })
             .catch(err => {
                 console.error('Token exchange error:', err);
-                showMessage('docMsg', 'error', '⚠️ Authentication error: ' + err.message);
+                showMessage('docMsg', 'error', '⚠️ Network error during authentication: ' + err.message);
             });
         }
 
