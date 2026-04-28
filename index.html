@@ -2864,7 +2864,7 @@
                 showMessage('withdrawMsg', 'success', '✓ Entrant restored');
             }
         }
-        function exportToExcel() {
+        async function exportToExcel() {
             if (csvData.length === 0) {
                 alert('⚠️ No data to export');
                 return;
