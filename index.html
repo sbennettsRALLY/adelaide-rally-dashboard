@@ -547,6 +547,18 @@
             document.head.appendChild(script);
         }
     </script>
+    <!-- Initialize Dropbox Token -->
+    <script>
+        // Set shared Dropbox access token for team sync
+        // This token enables all team members to sync to the same Dropbox folder
+        const DROPBOX_ACCESS_TOKEN = 'sl.u.AGcLgdRpEVy09jqb-Lo5YIG_K0F-Bu2RoYeilcR9JAsHsb8-OyqSk7dzyDnkn4TyJsH2uyHn6joQ_zVCCvm8tYh5EXIuUH-yMlfT_NyKIlFY7m0mkH-VK6K4qmGHhiuaM-xGoZol1co9KoEWIuA_p_ViHQk4XlL1Maa5MJMmVvKZVDXGM2ssfwIBw9KUPMDBP3jOpCeheUUqlX0ft-iCVJw4FQTKfdAzRUHgyyza8Hksg0z75Ixh1_oMoyqq3f2VDHQov_AU9bwl8Ct16n2_iD9e4eMMfhK9Nqa-woM2L81qM57FxR61Uu0TH1SXz7GNAphnsxHXBBw7xp591Ia1k7tsbHcgHoiy21ftLgTcGPz0up7leOIgbn6qq2vo2d9gqcJDS7Tom7frTRLBcj5oB4O2AaAvT6Gg-iZHs5vsXX8RlJKx5yDYZhOaaRP8hmzuctTI2Zb0faffHN4vhSiSXSyHYUUz1L4zrP5jGNmjpflExcVs-ED9O1_704CQS7ow_fJvE-GaKqC6gFpWS2MwVSJnY91g5-TO-76KB8K9JBFIqLeGkn1TkFopjq5L6J1amC3iRFK3q9ELC0itwlRu0kbViO2E0mvqmqnictnhC059iAvQbeBobYd3V6u3h-TaTJ-lQU3Xkt0JCFY5V1X2Q5IFH8DVcXmYD5Y-esAfTtVIH-MadXaQjeMv1UbRisnQYdh4xG5tPO0NOQIR7obAftEWggZsNK_Ju1wrmE7tNaZK3pB05TkgIYaWy8CRFLkwhtBKfFGkB0x_4QIlA6ZMsI42kamTOEh9z2KaN_6qbnbGcuaLNF6sYCUJdtV13NZlR9f4R6D9EWUnmjNqSIiW-Tyt8qczE1xv15sopRgoTArIhj8IYLZbuvzPFk6zZ8G6g9r1cGCa-lpMw5cDVUAITtLwCI-xRGB9SYuA1qiAFjDUUIw3e57r6CGQfkzdxEpsN0pRyym3vhDbVJptEtyVZLdBPsSKLicVuBoOc6PIZS5GA8JfW81UcRn1o5Do6D4AvcgSU_piJywVtH-zM8MA97kx39JtyR9TfOu50_Nyb2eFa2QMa-8K0xOQZbrDeUoW38wQOw5Ts3QObyfxXA3WLUbX9dlUNLdUZ0SSR8K2cdeRG0Qbwz34YK_BRi-nziE0qJuIczSQOF8Z_EF0ERYwUQVv-RBd5-uuZ6RpuTE1IoNyiJPw3cN_H2ztU63gKWkD2F9gFoJSOTf-rLlYtVO1MfQsnPOsGOv0xd_tt5pbOaE23xRv5kI-aIP1aVbomR_omsrjj8uf4nQKEX0DGN8zwwviX3feznwkp6hTNKJihc52b54w1Aoe7QielNcpqy9pYYFfT10AB6gf5CysE2Ht-x9ZWZ_BX96g88Bg2UBjuNmuUZdFu0ru4-l5Ak4caTGbUinf-U2QlAf-S5grtJ0A69wfHd_9KaJKmbkKRQSuEh82yADMzW3ABPHRQLp9IUb7E6LpmtwU1-JqrgzXy0rNtYLX-_aTs0EO8-utyHlOhWs31g';
+
+        // Check if token is already in localStorage, if not, set it
+        if (!localStorage.getItem('dropbox_access_token')) {
+            localStorage.setItem('dropbox_access_token', DROPBOX_ACCESS_TOKEN);
+            console.log('✓ Dropbox access token initialized');
+        }
+    </script>
     </style>
 </head>
 <body>
@@ -1130,8 +1142,8 @@
                 loadFromStorage();
             }
 
-            // Initialize SharePoint sync (if on SharePoint)
-            initDropboxSync();
+            // Initialize Dropbox sync with SDK load waiting
+            initDropboxSyncWhenReady();
 
             // Render the default Document Chase view if data is available
             if (csvData.length > 0) {
@@ -2725,6 +2737,26 @@
                     console.error('Failed to load stored data:', e);
                 }
             }
+        }
+
+        // Wait for Dropbox SDK to load, then initialize sync
+        function initDropboxSyncWhenReady() {
+            let attempts = 0;
+            const maxAttempts = 20; // Try for up to 10 seconds
+
+            const checkSDK = setInterval(() => {
+                attempts++;
+                if (typeof Dropbox !== 'undefined') {
+                    clearInterval(checkSDK);
+                    console.log('✓ Dropbox SDK loaded, initializing sync...');
+                    initDropboxSync();
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(checkSDK);
+                    console.warn('⚠ Dropbox SDK failed to load after 10 seconds, using localStorage only');
+                    // Still initialize without SDK (will use localStorage fallback)
+                    initDropboxSync();
+                }
+            }, 500);
         }
 
         // Dropbox Cloud Sync Functions
