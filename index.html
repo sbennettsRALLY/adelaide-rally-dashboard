@@ -1158,6 +1158,8 @@
                 bodyRow.appendChild(tr);
             });
             updateCsvStats();
+            // Apply search filter to the newly built table
+            filterCsvTable();
         }
         function filterCsvTable() {
             const term = document.getElementById('csvSearch').value.toLowerCase();
@@ -1358,6 +1360,8 @@
             });
             updateDocStats();
             populateFilterOptions();
+            // Apply search filters and other filters to the newly built table
+            filterDocuments();
         }
         function getCategory(row, categoryIdxs) {
             // Find first non-empty "I am entering" column
