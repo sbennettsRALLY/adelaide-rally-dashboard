@@ -1939,12 +1939,14 @@
                 document.getElementById('navUnmatchedNoData').style.display = 'none';
                 document.getElementById('navUnmatchedTable').style.display = 'table';
             }
-            // Hide unmatched section by default
-            navUnmatchedSection.style.display = 'none';
             // Check if there are any unmatched after filtering
             if (filteredUnmatchedDrivers.length === 0 && filteredUnmatchedNavigators.length === 0) {
                 document.getElementById('navUnmatchedNoData').style.display = 'block';
                 document.getElementById('navUnmatchedTable').style.display = 'none';
+                // Only hide the section if there's truly no data to show
+                if (unmatchedDrivers.length === 0 && unmatchedNavigators.length === 0) {
+                    navUnmatchedSection.style.display = 'none';
+                }
             }
             // Render Additional Navigator Entries (multiple navigators nominating same driver)
             const additionalHeadRow = document.getElementById('navAdditionalHead');
