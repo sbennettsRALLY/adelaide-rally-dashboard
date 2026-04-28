@@ -537,23 +537,11 @@
             border-top: 1px solid var(--border);
             margin-top: 20px;
         }
-    <!-- Dropbox SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/dropbox@10.34.0/dist/Dropbox-sdk.min.js"></script>
-    <!-- Fallback CDN for Dropbox SDK -->
-    <script>
-        if (typeof Dropbox === 'undefined') {
-            var script = document.createElement('script');
-            script.src = 'https://unpkg.com/dropbox@10.34.0/dist/Dropbox-sdk.min.js';
-            document.head.appendChild(script);
-        }
-    </script>
-    <!-- Initialize Dropbox Token -->
+    <!-- Dropbox REST API (No SDK needed) -->
     <script>
         // Set shared Dropbox access token for team sync
-        // This token enables all team members to sync to the same Dropbox folder
-        const DROPBOX_ACCESS_TOKEN = 'sl.u.AGcLgdRpEVy09jqb-Lo5YIG_K0F-Bu2RoYeilcR9JAsHsb8-OyqSk7dzyDnkn4TyJsH2uyHn6joQ_zVCCvm8tYh5EXIuUH-yMlfT_NyKIlFY7m0mkH-VK6K4qmGHhiuaM-xGoZol1co9KoEWIuA_p_ViHQk4XlL1Maa5MJMmVvKZVDXGM2ssfwIBw9KUPMDBP3jOpCeheUUqlX0ft-iCVJw4FQTKfdAzRUHgyyza8Hksg0z75Ixh1_oMoyqq3f2VDHQov_AU9bwl8Ct16n2_iD9e4eMMfhK9Nqa-woM2L81qM57FxR61Uu0TH1SXz7GNAphnsxHXBBw7xp591Ia1k7tsbHcgHoiy21ftLgTcGPz0up7leOIgbn6qq2vo2d9gqcJDS7Tom7frTRLBcj5oB4O2AaAvT6Gg-iZHs5vsXX8RlJKx5yDYZhOaaRP8hmzuctTI2Zb0faffHN4vhSiSXSyHYUUz1L4zrP5jGNmjpflExcVs-ED9O1_704CQS7ow_fJvE-GaKqC6gFpWS2MwVSJnY91g5-TO-76KB8K9JBFIqLeGkn1TkFopjq5L6J1amC3iRFK3q9ELC0itwlRu0kbViO2E0mvqmqnictnhC059iAvQbeBobYd3V6u3h-TaTJ-lQU3Xkt0JCFY5V1X2Q5IFH8DVcXmYD5Y-esAfTtVIH-MadXaQjeMv1UbRisnQYdh4xG5tPO0NOQIR7obAftEWggZsNK_Ju1wrmE7tNaZK3pB05TkgIYaWy8CRFLkwhtBKfFGkB0x_4QIlA6ZMsI42kamTOEh9z2KaN_6qbnbGcuaLNF6sYCUJdtV13NZlR9f4R6D9EWUnmjNqSIiW-Tyt8qczE1xv15sopRgoTArIhj8IYLZbuvzPFk6zZ8G6g9r1cGCa-lpMw5cDVUAITtLwCI-xRGB9SYuA1qiAFjDUUIw3e57r6CGQfkzdxEpsN0pRyym3vhDbVJptEtyVZLdBPsSKLicVuBoOc6PIZS5GA8JfW81UcRn1o5Do6D4AvcgSU_piJywVtH-zM8MA97kx39JtyR9TfOu50_Nyb2eFa2QMa-8K0xOQZbrDeUoW38wQOw5Ts3QObyfxXA3WLUbX9dlUNLdUZ0SSR8K2cdeRG0Qbwz34YK_BRi-nziE0qJuIczSQOF8Z_EF0ERYwUQVv-RBd5-uuZ6RpuTE1IoNyiJPw3cN_H2ztU63gKWkD2F9gFoJSOTf-rLlYtVO1MfQsnPOsGOv0xd_tt5pbOaE23xRv5kI-aIP1aVbomR_omsrjj8uf4nQKEX0DGN8zwwviX3feznwkp6hTNKJihc52b54w1Aoe7QielNcpqy9pYYFfT10AB6gf5CysE2Ht-x9ZWZ_BX96g88Bg2UBjuNmuUZdFu0ru4-l5Ak4caTGbUinf-U2QlAf-S5grtJ0A69wfHd_9KaJKmbkKRQSuEh82yADMzW3ABPHRQLp9IUb7E6LpmtwU1-JqrgzXy0rNtYLX-_aTs0EO8-utyHlOhWs31g';
+        const DROPBOX_ACCESS_TOKEN = 'sl.u.AGeFNXH_HM1p0GuVBoWvE_sxQh24Zm-7NyR7LX5PMFqsZKoAHEkW6gVEv_rwtH_XzgqpT8LYBFwO_hCNeMMQVs7ueD95IvnxDgjpbVRwoo023h93DnA0ga0i2C0d9i8HbZt97URDbeM_Jv-FzemSy0BLH3FBNZoEJGKRMHhXfiiOzKf_PwOhHZkiY4SH7hI1IM8IImothH0Dsut2RZQEfq6KJe6tAykN-NQqqt--cjqNvgJ-7wMvD6KMyPyWhEcw9YAYizH6LGwgysLJ82S3SuDyY7ENh0HnXJVULOg_HWtWRgk-9orSsRSa9ohoWNxoE2eXTeNseafvntay5R3FL2eOvCMvVi9z8xFo4PQbBdi5NbqzE3oc3yxHtohMOU7OGJTn58rIM5haLTi8Qq5kViSVL40ghPRnalIwB1yB3e8B1l5gcMntSL9FBGGaxZxJgcaHEyo-BHnglVr4XxyiDL5YANJ9p7wFEiw-yv-F3ohCoVDWNn0FJd3oAhAmqFcgdWkk-7Rp4tmwY-IGDmyGdUKtQKPd1UQShp5vr-QnX8KMxAS2ircEtg-kOd6SnBS5vqpxsM7DIHbSTJmUuypR6PZwUtv_sodCmtZxh4VZxAeQspAr3YjHepHUGM_IkOAKCG6f_p00SsWhAOrm-BYGVUvtbU7s6d3ClG-vLpkb3L500CwEiad6mekqLK6-Ug19v5aFgTaHiWCHKy7ckCyRiucvmiWYYC3uX5ek9yJ6Gy6NGo-JQxOXVR-rj_tGVuZSnD5N1SmMFEOAav3oUfRsY-Xhoe73KoxX0YzNXIU8vNTE0Nwso4fLd8JVfS3R8dmMwwUoXOpX9hYfA-8XhEMbI6p-FXGMYKv8o6aFT1s8DwonVsgUrt6RG3CAJF7nrRQ7VnZkV4lmMv59kfgCPI0zU4TTpXs6Oqb5VnD8K2hid_v_czraPHzlyqESJGT7VrmBVo6Kcy2jzIwy3Ew3kQ2E29qXa2eykPeNeNyKuqGbT5UH2qzhTcui_M_bW7Ha3PZyrVXT_2iMgJrF7dmJjMtc9oyiivPiXdZzb2m-ZJVRPVBzgNFyiquy1vILDd3TwlCyupsZ1aPaKQ5qI1G6dikxMj4mTJdHlHzLVVvpcTKKm8IO8jTHU-IyO4snM3VWEvAMdnt8uNCYagUNOyQcCmPTyJJY8LWG94rDiLu5qmChk5RaSZqX0wMpQo3iR2Ag0KdO7_njLoqYOG-XaS1FvkjomPOLhbm-cKV_J69pYkrZJR4P2Mg6b6YYq2NLsGuq2CyLwpskJtdo2_HBZjKGSxBXSzvquaDAjcffLrYRaaxkCmt1DihBH7GbFASjeMPjL2dHXgqreB_5RssVg8FREED3pWf0JqbClQ90_B4KApk1PaDLzSlvvhD90exj9WGOblEu3c8lvD67S3z0feymAY_z--Mu';
 
-        // Check if token is already in localStorage, if not, set it
         if (!localStorage.getItem('dropbox_access_token')) {
             localStorage.setItem('dropbox_access_token', DROPBOX_ACCESS_TOKEN);
             console.log('✓ Dropbox access token initialized');
@@ -2713,7 +2701,7 @@
 
             // Also sync to Dropbox if available (asynchronous, no wait)
             if (dropboxSyncEnabled) {
-                saveToDropbox().catch(e => console.warn('Dropbox sync failed:', e));
+                syncToDropbox().catch(e => console.warn('Dropbox sync failed:', e));
             }
         }
 
@@ -2741,22 +2729,9 @@
 
         // Wait for Dropbox SDK to load, then initialize sync
         function initDropboxSyncWhenReady() {
-            let attempts = 0;
-            const maxAttempts = 20; // Try for up to 10 seconds
-
-            const checkSDK = setInterval(() => {
-                attempts++;
-                if (typeof Dropbox !== 'undefined') {
-                    clearInterval(checkSDK);
-                    console.log('✓ Dropbox SDK loaded, initializing sync...');
-                    initDropboxSync();
-                } else if (attempts >= maxAttempts) {
-                    clearInterval(checkSDK);
-                    console.warn('⚠ Dropbox SDK failed to load after 10 seconds, using localStorage only');
-                    // Still initialize without SDK (will use localStorage fallback)
-                    initDropboxSync();
-                }
-            }, 500);
+            // No SDK needed - using Dropbox REST API directly
+            console.log('✓ Initializing Dropbox REST API sync...');
+            initDropboxSync();
         }
 
         // Dropbox Cloud Sync Functions
@@ -2769,35 +2744,107 @@
 
         async function initDropboxSync() {
             try {
-                // Check if user is authenticated to Dropbox
-                if (typeof Dropbox !== 'undefined') {
-                    // Try to get access token from localStorage
-                    const accessToken = localStorage.getItem('dropbox_access_token');
-                    
-                    if (accessToken) {
-                        dropboxDbx = new Dropbox.Dropbox({ accessToken });
-                        dropboxSyncEnabled = true;
-                        console.log('✓ Cloud sync to Dropbox enabled');
-                        
-                        // Load from Dropbox on startup
-                        await loadFromDropbox();
-                        
-                        // Start auto-sync timer
-                        startDropboxAutoSync();
-                    } else {
-                        console.log('ℹ Dropbox not authenticated - Using localStorage only. Share the Dropbox link with your team.');
-                        dropboxSyncEnabled = false;
-                        loadFromStorage();
-                    }
-                } else {
-                    console.log('ℹ Dropbox SDK unavailable - Using localStorage only');
-                    dropboxSyncEnabled = false;
-                    loadFromStorage();
+                const token = localStorage.getItem('dropbox_access_token');
+                if (!token) {
+                    console.error('✗ No Dropbox token found');
+                    return;
                 }
-            } catch (e) {
-                console.log('ℹ Dropbox sync unavailable - Using localStorage only:', e);
+                
+                dropboxSyncEnabled = true;
+                console.log('✓ Dropbox REST API sync initialized');
+                
+                // Immediately sync from Dropbox
+                await syncFromDropbox();
+                
+                // Set up periodic sync
+                dropboxSyncTimer = setInterval(async () => {
+                    if (dropboxSyncEnabled) {
+                        await syncFromDropbox();
+                    }
+                }, DROPBOX_SYNC_INTERVAL);
+                
+            } catch (error) {
+                console.error('Error initializing Dropbox sync:', error);
                 dropboxSyncEnabled = false;
-                loadFromStorage();
+            }
+        }
+
+        async function syncToDropbox() {
+            if (!dropboxSyncEnabled) return;
+            
+            try {
+                const token = localStorage.getItem('dropbox_access_token');
+                const state = {
+                    entries: entries,
+                    navigationMarryEntries: navigationMarryEntries,
+                    timestamp: Date.now()
+                };
+                
+                const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Dropbox-API-Arg': JSON.stringify({
+                            path: DROPBOX_STATE_FILE,
+                            mode: 'overwrite'
+                        }),
+                        'Content-Type': 'application/octet-stream'
+                    },
+                    body: JSON.stringify(state)
+                });
+                
+                if (response.ok) {
+                    console.log('✓ Synced to Dropbox');
+                    lastSyncTimestamp = Date.now();
+                } else {
+                    console.warn('⚠ Dropbox sync failed:', response.status);
+                }
+            } catch (error) {
+                console.warn('⚠ Error syncing to Dropbox:', error.message);
+            }
+        }
+
+        async function syncFromDropbox() {
+            if (!dropboxSyncEnabled) return;
+            
+            try {
+                const token = localStorage.getItem('dropbox_access_token');
+                const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Dropbox-API-Arg': JSON.stringify({
+                            path: DROPBOX_STATE_FILE
+                        })
+                    }
+                });
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    const state = JSON.parse(text);
+                    
+                    if (state.entries) {
+                        entries = state.entries;
+                    }
+                    if (state.navigationMarryEntries) {
+                        navigationMarryEntries = state.navigationMarryEntries;
+                    }
+                    
+                    console.log('✓ Synced from Dropbox');
+                    lastSyncTimestamp = Date.now();
+                    
+                    // Refresh current view if CSV was uploaded
+                    if (currentView === 'doc-chase' || currentView === 'nav-mary') {
+                        switchView(currentView);
+                    }
+                } else if (response.status === 409) {
+                    // File doesn't exist yet, that's OK
+                    console.log('ℹ Dropbox state file not found (first sync)');
+                } else {
+                    console.warn('⚠ Failed to sync from Dropbox:', response.status);
+                }
+            } catch (error) {
+                console.warn('⚠ Error syncing from Dropbox:', error.message);
             }
         }
 
