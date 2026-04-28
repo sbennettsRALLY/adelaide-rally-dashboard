@@ -2735,11 +2735,6 @@
             let withdrawnCount = 0;
             const withdrawnSearchTerm = document.getElementById('withdrawnSearch').value.toLowerCase();
             const withdrawnIndices = Array.from(withdrawn).sort((a, b) => a - b);
-            // Find column indices for withdrawn entrants
-            const emailIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
-            const categoryIdxs = csvHeaders
-                .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
-                .filter(i => i >= 0);
             withdrawnIndices.forEach(idx => {
                 if (idx >= csvData.length) return; // Safety check
                 const row = csvData[idx];
