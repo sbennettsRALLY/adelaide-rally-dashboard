@@ -3227,8 +3227,8 @@
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
                 const fileName = `Adelaide_Rally_Export_${timestamp}.xlsx`;
 
-                // Upload to Dropbox first, then download from Dropbox to PC (avoids Mark of the Web)
-                await uploadExcelToDropboxThenDownload(blob, fileName);
+                // Upload to Dropbox only (avoid Protected View by downloading from Dropbox instead of locally)
+                await uploadExcelToDropboxOnly(blob, fileName);
             } catch (err) {
                 console.error('Export error:', err);
                 alert('⚠️ Error exporting to Excel: ' + err.message);
@@ -3255,13 +3255,12 @@
         }
 
         // Upload to Dropbox, get temp link, then download from Dropbox (avoids Mark of the Web)
-        async function uploadExcelToDropboxThenDownload(blob, fileName) {
+        // Upload to Dropbox and create direct download link
+        async function uploadExcelToDropboxOnly(blob, fileName) {
             const dropboxToken = localStorage.getItem('dropbox_access_token');
 
             if (!dropboxToken) {
-                // Fallback: download directly to PC (will have Mark of the Web, but no choice)
-                showMessage('docMsg', 'info', 'Downloading file...');
-                await downloadExcelFile(blob, fileName);
+                showMessage('docMsg', 'warning', '⚠️ Not signed in to Dropbox. Please sign in to export files.');
                 return;
             }
 
@@ -3288,69 +3287,70 @@
                 }
 
                 const uploadData = await uploadResponse.json();
-                const dropboxPath = uploadData.path_display || uploadData.path;
+                const filePath = uploadData.path_display || uploadData.path;
 
-                showMessage('docMsg', 'info', 'Generating download link...');
+                console.log('✓ File uploaded to Dropbox:', filePath);
+                showMessage('docMsg', 'info', 'Creating download link...');
 
-                // Step 2: Get temporary download link from Dropbox
-                const linkResponse = await fetch('https://www.dropboxapi.com/2/files/get_temporary_link', {
+                // Step 2: Create a shareable link for the file
+                const shareResponse = await fetch('https://www.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${dropboxToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        path: dropboxPath
+                        path: filePath,
+                        settings: {
+                            requested_visibility: 'public'
+                        }
                     })
                 });
 
-                if (!linkResponse.ok) {
-                    throw new Error('Failed to get Dropbox link: ' + linkResponse.statusText);
+                let downloadUrl = null;
+
+                if (shareResponse.ok) {
+                    const shareData = await shareResponse.json();
+                    downloadUrl = shareData.url;
+                    // Modify URL to force download (add ?dl=1 parameter)
+                    downloadUrl = downloadUrl.replace('?dl=0', '?dl=1');
+                    if (!downloadUrl.includes('?dl=')) {
+                        downloadUrl = downloadUrl + '?dl=1';
+                    }
+                    console.log('✓ Download link created:', downloadUrl);
+                } else {
+                    // If link creation fails, try to get existing links
+                    const existingResponse = await fetch('https://www.dropboxapi.com/2/sharing/list_shared_links', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${dropboxToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            path: filePath
+                        })
+                    });
+
+                    if (existingResponse.ok) {
+                        const existingData = await existingResponse.json();
+                        if (existingData.links && existingData.links.length > 0) {
+                            downloadUrl = existingData.links[0].url.replace('?dl=0', '?dl=1');
+                            if (!downloadUrl.includes('?dl=')) {
+                                downloadUrl = downloadUrl + '?dl=1';
+                            }
+                        }
+                    }
                 }
 
-                const linkData = await linkResponse.json();
-                const tempLink = linkData.link;
-
-                console.log('📥 Downloading from Dropbox URL:', tempLink);
-                showMessage('docMsg', 'info', 'Downloading from Dropbox...');
-
-                // Step 3: Download directly from the Dropbox temporary link (file comes from trusted Dropbox source)
-                await downloadFromUrl(tempLink, fileName);
-
-                showMessage('docMsg', 'success', `✓ Downloaded from Dropbox: ${fileName}<br>✓ Backed up in Dropbox: Adelaide Rally Exports folder`);
+                if (downloadUrl) {
+                    showMessage('docMsg', 'success', `✓ File ready to download:<br><a href="${downloadUrl}" download="${fileName}" style="color: #0066cc; text-decoration: underline; font-weight: bold;">⬇️ Click here to download ${fileName}</a>`);
+                } else {
+                    showMessage('docMsg', 'success', `✓ Uploaded to Dropbox: Adelaide Rally Exports<br>File is ready in your Dropbox folder.`);
+                }
             } catch (err) {
                 console.error('Error:', err);
-                // Fallback: download directly
-                showMessage('docMsg', 'info', 'Dropbox failed, downloading directly...');
-                try {
-                    await downloadExcelFile(blob, fileName);
-                    showMessage('docMsg', 'success', `✓ Downloaded to your computer: ${fileName}<br>⚠️ Note: File may need to be downloaded from Dropbox instead to avoid Protected View`);
-                } catch (fallbackErr) {
-                    showMessage('docMsg', 'error', '✗ Download failed: ' + err.message);
-                }
+                showMessage('docMsg', 'error', '✗ Error: ' + err.message);
             }
-        }
-
-        // Download file directly from Dropbox URL (not as local blob - avoids Mark of the Web)
-        function downloadFromUrl(url, fileName) {
-            return new Promise((resolve, reject) => {
-                try {
-                    // Download directly from Dropbox URL - browser treats it as remote file, not local blob
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = fileName;
-                    link.setAttribute('target', '_blank');
-                    document.body.appendChild(link);
-                    link.click();
-
-                    setTimeout(() => {
-                        document.body.removeChild(link);
-                        resolve();
-                    }, 100);
-                } catch (err) {
-                    reject(err);
-                }
-            });
         }
     </script>
 </body>
