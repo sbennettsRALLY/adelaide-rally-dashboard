@@ -3296,40 +3296,6 @@
                 const filePath = uploadData.path_display || uploadData.path;
 
                 console.log('✓ File uploaded to Dropbox:', filePath);
-                showMessage('docMsg', 'info', 'Downloading from Dropbox...');
-
-                // Step 2: Download file from Dropbox (so it comes from trusted Dropbox servers, not webpage)
-                const downloadResponse = await fetch('https://content.dropboxapi.com/2/files/download', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${dropboxToken}`,
-                        'Dropbox-API-Arg': JSON.stringify({
-                            path: filePath
-                        })
-                    }
-                });
-
-                if (!downloadResponse.ok) {
-                    throw new Error('Dropbox download failed: ' + downloadResponse.statusText);
-                }
-
-                // Get file as blob from Dropbox
-                const fileBlob = await downloadResponse.blob();
-
-                // Step 3: Trigger download from Dropbox blob (file origin is Dropbox, not webpage)
-                const blobUrl = URL.createObjectURL(fileBlob);
-                const link = document.createElement('a');
-                link.href = blobUrl;
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-
-                setTimeout(() => {
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(blobUrl);
-                }, 100);
-
-                console.log('✓ Downloaded from Dropbox:', fileName);
 
                 // Show success with direct download link to the file
                 const fileId = uploadData.id;
