@@ -510,6 +510,7 @@
                 <button class="file-upload-btn" id="uploadBtn">📤 Upload CSV</button>
                 <input type="file" id="csvInput" class="file-input" accept=".csv" />
                 <button class="file-upload-btn" id="exportExcelBtn" onclick="exportToExcel()">📊 Export to Excel</button>
+                <button class="file-upload-btn" id="openExcelOnlineBtn" onclick="openExcelOnline()" title="Open in browser-based Excel (no download needed, no Windows security issues)">☁️ Open in Excel Online</button>
             </div>
         </div>
         <div class="nav" id="navBar" style="display: none;">
@@ -3206,8 +3207,7 @@
                 });
                 const withdrawnWs = XLSX.utils.aoa_to_sheet(withdrawnData);
                 XLSX.utils.book_append_sheet(wb, withdrawnWs, 'Withdrawals');
-                // Add workbook properties to prevent Protected View warning on Windows
-                // This marks the file as trusted and allows normal opening
+                // Add workbook properties to mark file as trusted
                 wb.Props = {
                     Title: 'Adelaide Rally Entry Data',
                     Subject: 'Rally Entry Management Export',
@@ -3220,11 +3220,116 @@
                     LastAuthor: 'Adelaide Rally Dashboard',
                     CreatedDate: new Date()
                 };
-                // Export the workbook with proper settings to avoid Protected View
-                XLSX.writeFile(wb, 'Adelaide_Rally_Export.xlsx', {bookType: 'xlsx', bookSST: true});
+                // Generate binary file with maximum compatibility for Windows Excel
+                const wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+                // Create blob and download via manual blob approach (avoids Protected View issues)
+                const blob = new Blob([wbout], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'Adelaide_Rally_Export.xlsx';
+                // Append, click, and clean up immediately
+                document.body.appendChild(link);
+                link.click();
+                // Clean up
+                setTimeout(() => {
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }, 100);
             } catch (err) {
                 console.error('Export error:', err);
                 alert('⚠️ Error exporting to Excel: ' + err.message);
+            }
+        }
+        function openExcelOnline() {
+            if (csvData.length === 0) {
+                alert('⚠️ No data to export');
+                return;
+            }
+            if (typeof XLSX === 'undefined') {
+                alert('⚠️ Excel library is still loading. Please try again in a moment.');
+                return;
+            }
+            try {
+                // Create workbook with same structure as exportToExcel()
+                const wb = XLSX.utils.book_new();
+                // Find common column indices (same as exportToExcel)
+                const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                const firstNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+                const lastNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+                const phoneIdx = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+                const emailIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
+                const entryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+                const paymentAmountIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('payment ammount') || h.toLowerCase().includes('payment amount'));
+                const paymentCompletedIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('payment completed'));
+                const categoryIdxs = csvHeaders
+                    .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
+                    .filter(i => i >= 0);
+                // Create sorted indices
+                const sortedIndices = Array.from({length: csvData.length}, (_, i) => i)
+                    .sort((a, b) => {
+                        const entryA = entryIdIdx >= 0 ? parseInt(csvData[a][entryIdIdx]) || 0 : 0;
+                        const entryB = entryIdIdx >= 0 ? parseInt(csvData[b][entryIdIdx]) || 0 : 0;
+                        return entryA - entryB;
+                    });
+
+                // Add Raw Data sheet
+                const rawDataRows = [csvHeaders, ...csvData];
+                const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
+                XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
+
+                // Add Document Chase sheet (same logic as exportToExcel)
+                const docChaseData = [['Entry #', 'Name', 'Phone', 'Email Address', 'Disclaimer Check', 'Photo ID', 'Payment Complete', 'Entry Type', 'Category']];
+                sortedIndices.forEach(idx => {
+                    if (withdrawn.has(idx)) return;
+                    const row = csvData[idx];
+                    const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                    const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
+                    const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
+                    const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
+                    const phone = phoneIdx >= 0 ? row[phoneIdx] || '' : '';
+                    const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
+                    const hasDisclaimer = disclaimerChecked[entryId] ? '✓' : '';
+                    const hasPhotoId = photoIdVerified[entryId] ? '✓' : '';
+                    const entryType = entryTypeIdx >= 0 ? row[entryTypeIdx] || '' : '';
+                    const paymentAmount = paymentAmountIdx >= 0 ? row[paymentAmountIdx] : '';
+                    const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount.trim()) : 0;
+                    const paymentDisplay = (paymentAmountNum > 0) ? ('$' + paymentAmount) : '✓';
+                    const category = getCategory(row, categoryIdxs);
+                    docChaseData.push([entryId, name, phone, email, hasDisclaimer, hasPhotoId, paymentDisplay, entryType, category]);
+                });
+                const docChaseWs = XLSX.utils.aoa_to_sheet(docChaseData);
+                XLSX.utils.book_append_sheet(wb, docChaseWs, 'Document Chase');
+
+                // Add workbook properties
+                wb.Props = {
+                    Title: 'Adelaide Rally Entry Data',
+                    Subject: 'Rally Entry Management Export',
+                    Author: 'Adelaide Rally Dashboard',
+                    Manager: 'Rally Team',
+                    Company: 'Adelaide Rally',
+                    CreatedDate: new Date()
+                };
+
+                // Generate Excel file as binary array and blob
+                const wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+                const blob = new Blob([wbout], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+                const blobUrl = URL.createObjectURL(blob);
+
+                // Store blob URL in sessionStorage temporarily so Excel Online window can access it
+                window.sessionStorage.setItem('excelBlobUrl', blobUrl);
+                window.sessionStorage.setItem('excelBlobExpiry', Date.now() + 300000); // 5 minute expiry
+
+                // Open Excel Online in new window with instruction
+                // Excel Online can't directly open blob: URLs, so we open the editor and user uploads the file
+                const excelOnlineUrl = 'https://www.office.com/launch/excel';
+                window.open(excelOnlineUrl, '_blank', 'width=1200,height=800');
+
+                // Show instruction message
+                showMessage('docMsg', 'success', '✓ Excel Online opened in new window. Click "Upload" to select your file or use the download option below and upload from your computer.');
+            } catch (err) {
+                console.error('Excel Online open error:', err);
+                alert('⚠️ Error preparing Excel file: ' + err.message);
             }
         }
     </script>
