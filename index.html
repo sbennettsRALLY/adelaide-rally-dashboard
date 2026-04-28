@@ -2312,7 +2312,7 @@
         function embedDataInHtml() {
             showMessage('docMsg', 'info', 'ℹ️ Use Export to save your data as a JSON file instead');
         }
-        function switchView(viewName) {
+        function switchView(viewName, scrollToTop = true) {
             event?.preventDefault();
             currentView = viewName;
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2335,12 +2335,17 @@
             } else if (viewName === 'nav-marry') {
                 renderNavMarryTable();
             } else if (viewName === 'withdrawals') {
-                // Clear search fields to show all entrants by default when switching to this tab
-                document.getElementById('withdrawSearch').value = '';
-                document.getElementById('withdrawnSearch').value = '';
+                // Clear search fields only on manual tab switch (not during sync refresh)
+                if (scrollToTop) {
+                    document.getElementById('withdrawSearch').value = '';
+                    document.getElementById('withdrawnSearch').value = '';
+                }
                 renderWithdrawalTab();
             }
-            window.scrollTo(0, 0);
+            // Only scroll to top if this is a manual view switch (not an auto-sync refresh)
+            if (scrollToTop) {
+                window.scrollTo(0, 0);
+            }
         }
         function toggleUnmatchedSection() {
             const section = document.getElementById('navUnmatchedSection');
@@ -2556,9 +2561,9 @@
 
                     console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
                     lastSyncTimestamp = Date.now();
-                    // Refresh current view if CSV was uploaded
+                    // Refresh current view if CSV was uploaded (without scrolling to top)
                     if (currentView === 'doc-chase' || currentView === 'nav-marry') {
-                        switchView(currentView);
+                        switchView(currentView, false);
                     }
                 } else if (response.status === 409) {
                     // File doesn't exist yet, that's OK
