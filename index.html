@@ -2374,8 +2374,15 @@
         function showMessage(elemId, type, text) {
             const el = document.getElementById(elemId);
             el.className = 'message ' + type;
-            el.textContent = text;
-            setTimeout(() => el.className = 'message', 4000);
+            // Use innerHTML if text contains HTML (like <a> tags), otherwise use textContent
+            if (text.includes('<')) {
+                el.innerHTML = text;
+            } else {
+                el.textContent = text;
+            }
+            // Keep success messages visible for 10 seconds, others for 4 seconds
+            const duration = type === 'success' ? 10000 : 4000;
+            setTimeout(() => el.className = 'message', duration);
         }
         function saveToStorage() {
             const data = {
