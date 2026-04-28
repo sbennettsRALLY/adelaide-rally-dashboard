@@ -1456,8 +1456,11 @@
                     const entryB = entryIdIdx >= 0 ? parseInt(csvData[b][entryIdIdx]) || 0 : 0;
                     return entryA - entryB;
                 });
-            // Apply filters using sorted order
-            sortedIndices.forEach((idx, rowIndex) => {
+            // Apply filters using sorted order, skipping withdrawn entries to match renderDocTable's row building
+            let visibleRowIndex = 0;
+            sortedIndices.forEach((idx) => {
+                if (withdrawn.has(idx)) return; // Skip withdrawn entrants - matches renderDocTable behavior
+
                 const row = csvData[idx];
                 const entryType = entryTypeIdx >= 0 ? row[entryTypeIdx] : '';
                 // Get category (first non-empty "I am entering" column)
@@ -1524,7 +1527,8 @@
                     const isComplete = disclaimerChecked[entryId] && photoIdVerified[entryId] && isPaymentComplete;
                     shouldShow = !isComplete;
                 }
-                rows[rowIndex].style.display = (shouldShow && matchesSearch) ? '' : 'none';
+                rows[visibleRowIndex].style.display = (shouldShow && matchesSearch) ? '' : 'none';
+                visibleRowIndex++;
             });
         }
         function updateRowStyling(idx) {
@@ -2402,6 +2406,8 @@
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
                     withdrawn = new Set(data.withdrawn || []);
+                    // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
+                    lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
                         document.getElementById('navBar').style.display = 'flex';
                     }
