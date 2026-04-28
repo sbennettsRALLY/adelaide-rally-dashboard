@@ -3311,9 +3311,10 @@
                 const linkData = await linkResponse.json();
                 const tempLink = linkData.link;
 
+                console.log('📥 Downloading from Dropbox URL:', tempLink);
                 showMessage('docMsg', 'info', 'Downloading from Dropbox...');
 
-                // Step 3: Download from the Dropbox link (file comes from trusted Dropbox source)
+                // Step 3: Download directly from the Dropbox temporary link (file comes from trusted Dropbox source)
                 await downloadFromUrl(tempLink, fileName);
 
                 showMessage('docMsg', 'success', `✓ Downloaded from Dropbox: ${fileName}<br>✓ Backed up in Dropbox: Adelaide Rally Exports folder`);
@@ -3330,29 +3331,25 @@
             }
         }
 
-        // Download file from a URL (for Dropbox temp links)
+        // Download file directly from Dropbox URL (not as local blob - avoids Mark of the Web)
         function downloadFromUrl(url, fileName) {
             return new Promise((resolve, reject) => {
-                fetch(url)
-                    .then(response => {
-                        if (!response.ok) throw new Error('Download failed');
-                        return response.blob();
-                    })
-                    .then(blob => {
-                        const blobUrl = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = blobUrl;
-                        link.download = fileName;
-                        document.body.appendChild(link);
-                        link.click();
+                try {
+                    // Download directly from Dropbox URL - browser treats it as remote file, not local blob
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    link.setAttribute('target', '_blank');
+                    document.body.appendChild(link);
+                    link.click();
 
-                        setTimeout(() => {
-                            document.body.removeChild(link);
-                            URL.revokeObjectURL(blobUrl);
-                            resolve();
-                        }, 100);
-                    })
-                    .catch(reject);
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        resolve();
+                    }, 100);
+                } catch (err) {
+                    reject(err);
+                }
             });
         }
     </script>
