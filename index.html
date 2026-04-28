@@ -755,7 +755,10 @@
                         <table id="withdrawnTable" style="width: 100%;">
                             <thead>
                                 <tr>
+                                    <th style="text-align: left; padding: 8px;">Entry #</th>
                                     <th style="text-align: left; padding: 8px;">Name</th>
+                                    <th style="text-align: left; padding: 8px;">Email</th>
+                                    <th style="text-align: left; padding: 8px;">Category</th>
                                     <th style="text-align: center; padding: 8px; width: 80px;">Action</th>
                                 </tr>
                             </thead>
@@ -1784,9 +1787,21 @@
                 matchedIndices.add(pair.navigator.idx);
             });
 
+            // Build nomination map to find additional navigator entries (multiple navigators for same driver)
+            const tempDriverNominationMap = {}; // driverPhone -> [navigators]
+            navigators.forEach(nav => {
+                if (nav.nominatedPhone && nav.nominatedPhone.trim()) {
+                    const nomPhone = nav.nominatedPhone.trim();
+                    if (!tempDriverNominationMap[nomPhone]) {
+                        tempDriverNominationMap[nomPhone] = [];
+                    }
+                    tempDriverNominationMap[nomPhone].push(nav);
+                }
+            });
+
             // Add indices from additional navigator entries (multiple navigators for same driver)
-            Object.keys(driverNominationMap).forEach(driverPhone => {
-                const nomNavigators = driverNominationMap[driverPhone];
+            Object.keys(tempDriverNominationMap).forEach(driverPhone => {
+                const nomNavigators = tempDriverNominationMap[driverPhone];
                 if (nomNavigators.length > 1) {
                     const nomDriver = drivers.find(drv => drv.phone && drv.phone.trim() === driverPhone);
                     if (nomDriver) {
@@ -2716,13 +2731,42 @@
             let withdrawnCount = 0;
             const withdrawnSearchTerm = document.getElementById('withdrawnSearch').value.toLowerCase();
             const withdrawnIndices = Array.from(withdrawn).sort((a, b) => a - b);
+            // Find column indices for withdrawn entrants
+            const emailIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
+            const categoryIdxs = csvHeaders
+                .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
+                .filter(i => i >= 0);
             withdrawnIndices.forEach(idx => {
                 if (idx >= csvData.length) return; // Safety check
                 const row = csvData[idx];
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                 const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
                 const fullName = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || entryId || `Entry ${idx}`);
+
+                // Get category
+                let category = '';
+                for (let cidx of categoryIdxs) {
+                    if (row[cidx] && row[cidx].trim()) {
+                        category = row[cidx].trim();
+                        if (category.toLowerCase().startsWith('branded tour')) {
+                            const startIdx = categoryIdxs.indexOf(cidx);
+                            for (let i = startIdx + 1; i < categoryIdxs.length; i++) {
+                                const nextIdx = categoryIdxs[i];
+                                if (row[nextIdx] && row[nextIdx].trim()) {
+                                    const nextValue = row[nextIdx].trim();
+                                    if (!nextValue.toLowerCase().startsWith('branded tour')) {
+                                        category = nextValue;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+
                 // Apply search filter for withdrawn entrants
                 if (withdrawnSearchTerm && !fullName.toLowerCase().includes(withdrawnSearchTerm) &&
                     !entryId.toLowerCase().includes(withdrawnSearchTerm)) {
@@ -2730,10 +2774,32 @@
                 }
                 withdrawnCount++;
                 const tr = document.createElement('tr');
+
+                // Entry #
+                const tdEntryId = document.createElement('td');
+                tdEntryId.textContent = entryId;
+                tdEntryId.style.padding = '8px';
+                tr.appendChild(tdEntryId);
+
+                // Name
                 const tdName = document.createElement('td');
                 tdName.textContent = fullName;
                 tdName.style.padding = '8px';
                 tr.appendChild(tdName);
+
+                // Email
+                const tdEmail = document.createElement('td');
+                tdEmail.textContent = email;
+                tdEmail.style.padding = '8px';
+                tr.appendChild(tdEmail);
+
+                // Category
+                const tdCategory = document.createElement('td');
+                tdCategory.textContent = category;
+                tdCategory.style.padding = '8px';
+                tr.appendChild(tdCategory);
+
+                // Action
                 const tdAction = document.createElement('td');
                 tdAction.style.textAlign = 'center';
                 tdAction.style.padding = '8px';
