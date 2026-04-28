@@ -1943,11 +1943,8 @@
             if (filteredUnmatchedDrivers.length === 0 && filteredUnmatchedNavigators.length === 0) {
                 document.getElementById('navUnmatchedNoData').style.display = 'block';
                 document.getElementById('navUnmatchedTable').style.display = 'none';
-                // Only hide the section if there's truly no data to show
-                if (unmatchedDrivers.length === 0 && unmatchedNavigators.length === 0) {
-                    navUnmatchedSection.style.display = 'none';
-                }
             }
+            // NOTE: Do NOT hide the section here - let the toggle button control visibility
             // Render Additional Navigator Entries (multiple navigators nominating same driver)
             const additionalHeadRow = document.getElementById('navAdditionalHead');
             additionalHeadRow.innerHTML = '';
