@@ -3309,25 +3309,46 @@
                         body: JSON.stringify({
                             path: filePath,
                             settings: {
-                                requested_visibility: 'public',
-                                requested_expires: null,
-                                allow_download: true
+                                requested_visibility: 'public'
                             }
                         })
                     });
 
+                    let sharedLink = null;
+
                     if (shareResponse.ok) {
                         const shareData = await shareResponse.json();
-                        const sharedLink = shareData.url + '?dl=1'; // Add dl=1 to force direct download
+                        sharedLink = shareData.url;
                         console.log('✓ Shared link created:', sharedLink);
+                    } else if (shareResponse.status === 409) {
+                        // Link already exists, try to get it
+                        const getLinkResponse = await fetch('https://www.dropboxapi.com/2/sharing/list_shared_links', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${dropboxToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                path: filePath
+                            })
+                        });
 
+                        if (getLinkResponse.ok) {
+                            const linkData = await getLinkResponse.json();
+                            if (linkData.links && linkData.links.length > 0) {
+                                sharedLink = linkData.links[0].url;
+                                console.log('✓ Existing shared link found:', sharedLink);
+                            }
+                        }
+                    }
+
+                    if (sharedLink) {
                         const messageHtml = `✓ File uploaded to Dropbox: ${fileName}<br>
                             <a href="${sharedLink}" target="_blank" style="display: inline-block; margin-top: 8px; padding: 8px 16px; background: #0061ff; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Download file from Dropbox</a><br>
                             <span style="font-size: 12px; color: #666; margin-top: 4px;">Backup saved in: Adelaide Rally Exports</span>`;
-
                         showMessage('docMsg', 'success', messageHtml);
                     } else {
-                        throw new Error('Share API failed: ' + shareResponse.statusText);
+                        throw new Error('Could not create or retrieve shared link');
                     }
                 } catch (shareErr) {
                     console.error('Share link error:', shareErr);
