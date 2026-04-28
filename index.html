@@ -2699,9 +2699,9 @@
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
 
-            // Also sync to SharePoint if available (asynchronous, no wait)
-            if (sharePointSyncEnabled) {
-                saveToDropbox().catch(e => console.warn('SharePoint sync failed:', e));
+            // Also sync to Dropbox if available (asynchronous, no wait)
+            if (dropboxSyncEnabled) {
+                saveToDropbox().catch(e => console.warn('Dropbox sync failed:', e));
             }
         }
 
