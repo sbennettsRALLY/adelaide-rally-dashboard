@@ -3254,8 +3254,7 @@
             });
         }
 
-        // Upload to Dropbox, get temp link, then download from Dropbox (avoids Mark of the Web)
-        // Upload to Dropbox and create direct download link
+        // Upload to Dropbox and get temporary download link
         async function uploadExcelToDropboxOnly(blob, fileName) {
             const dropboxToken = localStorage.getItem('dropbox_access_token');
 
@@ -3290,63 +3289,35 @@
                 const filePath = uploadData.path_display || uploadData.path;
 
                 console.log('✓ File uploaded to Dropbox:', filePath);
-                showMessage('docMsg', 'info', 'Creating download link...');
+                showMessage('docMsg', 'info', 'Getting download link...');
 
-                // Step 2: Create a shareable link for the file
-                const shareResponse = await fetch('https://www.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+                // Step 2: Get temporary download link from Dropbox
+                const linkResponse = await fetch('https://www.dropboxapi.com/2/files/get_temporary_link', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${dropboxToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        path: filePath,
-                        settings: {
-                            requested_visibility: 'public'
-                        }
+                        path: filePath
                     })
                 });
 
-                let downloadUrl = null;
-
-                if (shareResponse.ok) {
-                    const shareData = await shareResponse.json();
-                    downloadUrl = shareData.url;
-                    // Modify URL to force download (add ?dl=1 parameter)
-                    downloadUrl = downloadUrl.replace('?dl=0', '?dl=1');
-                    if (!downloadUrl.includes('?dl=')) {
-                        downloadUrl = downloadUrl + '?dl=1';
-                    }
-                    console.log('✓ Download link created:', downloadUrl);
-                } else {
-                    // If link creation fails, try to get existing links
-                    const existingResponse = await fetch('https://www.dropboxapi.com/2/sharing/list_shared_links', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${dropboxToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            path: filePath
-                        })
-                    });
-
-                    if (existingResponse.ok) {
-                        const existingData = await existingResponse.json();
-                        if (existingData.links && existingData.links.length > 0) {
-                            downloadUrl = existingData.links[0].url.replace('?dl=0', '?dl=1');
-                            if (!downloadUrl.includes('?dl=')) {
-                                downloadUrl = downloadUrl + '?dl=1';
-                            }
-                        }
-                    }
+                if (!linkResponse.ok) {
+                    throw new Error('Failed to get download link: ' + linkResponse.statusText);
                 }
 
-                if (downloadUrl) {
-                    showMessage('docMsg', 'success', `✓ File ready to download:<br><a href="${downloadUrl}" download="${fileName}" style="color: #0066cc; text-decoration: underline; font-weight: bold;">⬇️ Click here to download ${fileName}</a>`);
-                } else {
-                    showMessage('docMsg', 'success', `✓ Uploaded to Dropbox: Adelaide Rally Exports<br>File is ready in your Dropbox folder.`);
-                }
+                const linkData = await linkResponse.json();
+                const downloadUrl = linkData.link;
+
+                console.log('✓ Download link ready:', downloadUrl);
+
+                // Step 3: Display clickable link to user
+                const messageHtml = `✓ File uploaded to Dropbox<br>
+                    <a href="${downloadUrl}" target="_blank" style="display: inline-block; margin-top: 8px; padding: 8px 16px; background: #0061ff; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Click here to download: ${fileName}</a><br>
+                    <span style="font-size: 12px; color: #666; margin-top: 4px;">Backup saved in: Adelaide Rally Exports</span>`;
+
+                showMessage('docMsg', 'success', messageHtml);
             } catch (err) {
                 console.error('Error:', err);
                 showMessage('docMsg', 'error', '✗ Error: ' + err.message);
