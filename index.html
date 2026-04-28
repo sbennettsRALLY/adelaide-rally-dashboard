@@ -3296,15 +3296,48 @@
                 const filePath = uploadData.path_display || uploadData.path;
 
                 console.log('✓ File uploaded to Dropbox:', filePath);
+                showMessage('docMsg', 'info', 'Creating shareable link...');
 
-                // Show success with direct download link to the file
-                const fileId = uploadData.id.replace('id:', ''); // Remove 'id:' prefix
-                const directFileLink = `https://www.dropbox.com/scl/fi/${fileId}/${encodeURIComponent(uploadData.name)}`;
-                const messageHtml = `✓ Downloaded from Dropbox: ${fileName}<br>
-                    <a href="${directFileLink}" target="_blank" style="display: inline-block; margin-top: 8px; padding: 8px 16px; background: #0061ff; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Direct link to file in Dropbox</a><br>
-                    <span style="font-size: 12px; color: #666; margin-top: 4px;">Backup saved in: Adelaide Rally Exports</span>`;
+                // Try to create a shared link for the file
+                try {
+                    const shareResponse = await fetch('https://www.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${dropboxToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            path: filePath,
+                            settings: {
+                                requested_visibility: 'public',
+                                requested_expires: null,
+                                allow_download: true
+                            }
+                        })
+                    });
 
-                showMessage('docMsg', 'success', messageHtml);
+                    if (shareResponse.ok) {
+                        const shareData = await shareResponse.json();
+                        const sharedLink = shareData.url + '?dl=1'; // Add dl=1 to force direct download
+                        console.log('✓ Shared link created:', sharedLink);
+
+                        const messageHtml = `✓ File uploaded to Dropbox: ${fileName}<br>
+                            <a href="${sharedLink}" target="_blank" style="display: inline-block; margin-top: 8px; padding: 8px 16px; background: #0061ff; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Download file from Dropbox</a><br>
+                            <span style="font-size: 12px; color: #666; margin-top: 4px;">Backup saved in: Adelaide Rally Exports</span>`;
+
+                        showMessage('docMsg', 'success', messageHtml);
+                    } else {
+                        throw new Error('Share API failed: ' + shareResponse.statusText);
+                    }
+                } catch (shareErr) {
+                    console.error('Share link error:', shareErr);
+                    // Fallback: show folder link if sharing fails
+                    const folderLink = 'https://www.dropbox.com/home/Adelaide%20Rally%20Exports';
+                    const messageHtml = `✓ File uploaded to Dropbox: ${fileName}<br>
+                        <a href="${folderLink}" target="_blank" style="display: inline-block; margin-top: 8px; padding: 8px 16px; background: #0061ff; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">View in Dropbox folder</a><br>
+                        <span style="font-size: 12px; color: #666; margin-top: 4px;">Backup saved in: Adelaide Rally Exports</span>`;
+                    showMessage('docMsg', 'success', messageHtml);
+                }
             } catch (err) {
                 console.error('Error:', err);
                 showMessage('docMsg', 'error', '✗ Error: ' + err.message);
