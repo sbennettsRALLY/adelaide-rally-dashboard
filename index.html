@@ -787,6 +787,7 @@
         let disclaimerChecked = {}; // Track which entries have disclaimer checked (auto or manual)
         let disclaimerLocked = {}; // Track which entries are locked (found via Dropbox verification)
         let withdrawn = new Set(); // Track withdrawn entrant indices
+        let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
         let currentView = 'doc-chase';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
         let filterOutstandingPayment = false; // Filter for outstanding payments
@@ -2396,7 +2397,13 @@
             try {
                 const token = localStorage.getItem('dropbox_access_token');
                 const state = {
-                    entries: entries,
+                    csvData: csvData,
+                    csvHeaders: csvHeaders,
+                    docVerified: docVerified,
+                    photoIdVerified: photoIdVerified,
+                    disclaimerChecked: disclaimerChecked,
+                    disclaimerLocked: disclaimerLocked,
+                    withdrawn: Array.from(withdrawn),
                     navigationMarryEntries: navigationMarryEntries,
                     timestamp: Date.now()
                 };
@@ -2416,7 +2423,8 @@
                     console.log('✓ Synced to Dropbox');
                     lastSyncTimestamp = Date.now();
                 } else {
-                    console.warn('⚠ Dropbox sync failed:', response.status);
+                    const errorText = await response.text();
+                    console.warn('⚠ Dropbox sync failed:', response.status, errorText);
                 }
             } catch (error) {
                 console.warn('⚠ Error syncing to Dropbox:', error.message);
@@ -2438,12 +2446,15 @@
                 if (response.ok) {
                     const text = await response.text();
                     const state = JSON.parse(text);
-                    if (state.entries) {
-                        entries = state.entries;
-                    }
-                    if (state.navigationMarryEntries) {
-                        navigationMarryEntries = state.navigationMarryEntries;
-                    }
+                    // Load all saved state
+                    if (state.csvData) csvData = state.csvData;
+                    if (state.csvHeaders) csvHeaders = state.csvHeaders;
+                    if (state.docVerified) docVerified = state.docVerified;
+                    if (state.photoIdVerified) photoIdVerified = state.photoIdVerified;
+                    if (state.disclaimerChecked) disclaimerChecked = state.disclaimerChecked;
+                    if (state.disclaimerLocked) disclaimerLocked = state.disclaimerLocked;
+                    if (state.withdrawn) withdrawn = new Set(state.withdrawn);
+                    if (state.navigationMarryEntries) navigationMarryEntries = state.navigationMarryEntries;
                     console.log('✓ Synced from Dropbox');
                     lastSyncTimestamp = Date.now();
                     // Refresh current view if CSV was uploaded
@@ -2454,7 +2465,8 @@
                     // File doesn't exist yet, that's OK
                     console.log('ℹ Dropbox state file not found (first sync)');
                 } else {
-                    console.warn('⚠ Failed to sync from Dropbox:', response.status);
+                    const errorText = await response.text();
+                    console.warn('⚠ Failed to sync from Dropbox:', response.status, errorText);
                 }
             } catch (error) {
                 console.warn('⚠ Error syncing from Dropbox:', error.message);
