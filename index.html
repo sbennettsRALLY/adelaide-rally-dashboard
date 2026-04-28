@@ -1781,10 +1781,14 @@
             // First, identify which people are already matched (in confirmed pairs or additional entries)
             const matchedIndices = new Set();
 
-            // Add indices from confirmed pairs
+            // Add indices from confirmed pairs (only those that will actually be rendered)
             pairs.forEach(pair => {
-                matchedIndices.add(pair.driver.idx);
-                matchedIndices.add(pair.navigator.idx);
+                // Only add to matchedIndices if this pair will be rendered (nominationCount === 1)
+                const nominationCount = driverNominationCount[pair.driver.phone?.trim()] || 0;
+                if (nominationCount === 1) {
+                    matchedIndices.add(pair.driver.idx);
+                    matchedIndices.add(pair.navigator.idx);
+                }
             });
 
             // Build nomination map to find additional navigator entries (multiple navigators for same driver)
