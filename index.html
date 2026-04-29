@@ -546,6 +546,56 @@
         </div>
         <!-- Dashboard View -->
         <div id="dashboard" class="view">
+            <div id="dashMsg" class="message"></div>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; padding: 20px;">
+                <!-- Driver Entries Table -->
+                <div style="flex: 1; min-width: 400px;">
+                    <div class="sec-title">Driver Entry Summary</div>
+                    <div class="tbl-wrap">
+                        <table id="driverEntriesTable" style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: var(--navy-mid); color: white;">
+                                <tr>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid var(--border);">Category</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Entries</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Capacity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="driverEntriesBody"></tbody>
+                            <tfoot style="background: var(--bg); font-weight: bold;">
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid var(--border);">TOTAL</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalEntries">0</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalCapacity">0</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Additional Items Table -->
+                <div style="flex: 1; min-width: 400px;">
+                    <div class="sec-title">Additional Items Sales</div>
+                    <div class="tbl-wrap">
+                        <table id="additionalItemsTable" style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: var(--navy-mid); color: white;">
+                                <tr>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid var(--border);">Item</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Qty</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid var(--border);">Sales ($)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="additionalItemsBody"></tbody>
+                            <tfoot style="background: var(--bg); font-weight: bold;">
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid var(--border);">TOTAL</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalItemQty">0</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid var(--border);" id="totalItemSales">$0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
         <!-- CSV Data View -->
         <div id="csv-data" class="view">
@@ -1176,7 +1226,96 @@
             document.getElementById('csvTotal').textContent = csvData.length;
             document.getElementById('csvCols').textContent = csvHeaders.length;
             document.getElementById('csvVisible').textContent = csvData.length;
+            updateDashboardTables();
         }
+
+        // Dashboard table data
+        const driverEntryConfig = [
+            {category: 'Zagame', capacity: 51, header1: 'I am entering the Zagme Branded Tour', trigger1: 'Zagame'},
+            {category: 'Solitaire', capacity: 34, header1: 'I am entering the Solitaire Branded Tour', trigger1: 'Solitaire'},
+            {category: 'Glenelg BMW', capacity: 17, header1: 'I am entering the Glenelg BMW Branded Tour', trigger1: 'Glenelg BMW'},
+            {category: 'BMW MINI', capacity: 26, header1: 'I am entering the Adelaide BMW Branded Tour', trigger1: 'Adelaide BMW'},
+            {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes AMG'},
+            {category: 'Honda', capacity: 17, header1: 'I am entering the Honda Branded Tour', trigger1: 'Honda'},
+            {category: 'Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Hyundai'},
+            {category: 'Porsche Centre', capacity: 17, header1: 'I am entering the Porsche Centre Adelaide Branded Tour (Driver)', trigger1: 'Porsche Centre Adelaide'},
+            {category: 'Porsche Club', capacity: 34, header1: 'I am entering the Porsche Club Branded Tour', trigger1: 'Porsche Club'},
+            {category: 'Ferrari Club', capacity: 17, header1: 'I am entering the Ferrari Club Branded Tour', trigger1: 'Ferrari Club'},
+            {category: 'Main Tour', capacity: 45, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'Main Tour'},
+            {category: 'Spirit Tour', capacity: 55, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'Spirit Tour'},
+            {category: 'TSD', capacity: 12, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'TSD'},
+            {category: 'Challenge 120', capacity: 12, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'Challenge 120'},
+            {category: 'Challenge 130', capacity: 12, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'Challenge 130'},
+            {category: 'Comp/Rally Pro', capacity: 24, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'Competition'},
+            {category: 'Prima Tour', capacity: 60, header1: 'I am entering the following category as a DRIVER for this vehicle entry', trigger1: 'Prima Tour'},
+            {category: 'Tour Leader / Follower', capacity: 17, header1: 'I am entering as a Tour Leader / Follower', trigger1: 'Tour Leader / Follower'}
+        ];
+
+        const additionalItemsConfig = [
+            {item: 'MA Licence', price: 172.73, header: 'Do you currently hold a valid Motorsport Australia Licence?', trigger: 'No'},
+            {item: 'Prima Tour Licence', price: 36.36, header: 'Do you currently hold a valid Motorsport Australia Licence?', trigger: 'No (Prima Tour Entrants Only)'},
+            {item: 'Driver Swap', price: 86.36, header: 'Shared Drive (Driver & Navigator Swap)', trigger: 'yes'},
+            {item: 'T-Shirt', price: 59.09, header: 'I would like to purchase a 2026 Adelaide Rally additional items-2026 Adelaide Rally Long Sleeve T', trigger: 'yes'},
+            {item: 'Phone Cradle', price: 42.73, header: 'I would like to purchase a 2026 Adelaide Rally additional items-Adelaide Rally Phone Cradle', trigger: 'yes'},
+            {item: 'Phone Charger', price: 26.36, header: 'I would like to purchase a 2026 Adelaide Rally additional items-Adelaide Rally Phone Power Bank (USB C & Micro USB)', trigger: 'yes'},
+            {item: 'Media Pack', price: 268.18, header: 'I would like to purchase a media pack', trigger: 'Photo Pack inc. 10 x photos'}
+        ];
+
+        function updateDashboardTables() {
+            if (csvData.length === 0) return;
+
+            // Update driver entries
+            let totalEntries = 0;
+            let totalCapacity = 0;
+            const driverBody = document.getElementById('driverEntriesBody');
+            driverBody.innerHTML = '';
+
+            driverEntryConfig.forEach(config => {
+                const headerIdx = csvHeaders.findIndex(h => h === config.header1);
+                let entries = 0;
+                if (headerIdx >= 0) {
+                    entries = csvData.filter(row => row[headerIdx] === config.trigger1).length;
+                }
+                totalEntries += entries;
+                totalCapacity += config.capacity;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td style="padding: 10px; border: 1px solid var(--border);">${config.category}</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);">${entries}</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);">${config.capacity}</td>`;
+                driverBody.appendChild(tr);
+            });
+
+            document.getElementById('totalEntries').textContent = totalEntries;
+            document.getElementById('totalCapacity').textContent = totalCapacity;
+
+            // Update additional items
+            let totalQty = 0;
+            let totalSales = 0;
+            const itemsBody = document.getElementById('additionalItemsBody');
+            itemsBody.innerHTML = '';
+
+            additionalItemsConfig.forEach(config => {
+                const headerIdx = csvHeaders.findIndex(h => h === config.header);
+                let qty = 0;
+                if (headerIdx >= 0) {
+                    qty = csvData.filter(row => row[headerIdx] === config.trigger).length;
+                }
+                const sales = qty * config.price;
+                totalQty += qty;
+                totalSales += sales;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td style="padding: 10px; border: 1px solid var(--border);">${config.item}</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);">${qty}</td>
+                    <td style="padding: 10px; text-align: right; border: 1px solid var(--border);">$${sales.toFixed(2)}</td>`;
+                itemsBody.appendChild(tr);
+            });
+
+            document.getElementById('totalItemQty').textContent = totalQty;
+            document.getElementById('totalItemSales').textContent = '$' + totalSales.toFixed(2);
+        }
+
         function renderDocTable() {
             if (csvData.length === 0) {
                 document.getElementById('docNoData').style.display = 'block';
