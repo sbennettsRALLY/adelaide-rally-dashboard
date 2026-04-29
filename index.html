@@ -3587,8 +3587,8 @@
                 });
                 const navMarryWs = XLSX.utils.aoa_to_sheet(navMarryData);
                 XLSX.utils.book_append_sheet(wb, navMarryWs, 'Nav Marry');
-                // ===== SHEET 6: Withdrawals =====
-                const withdrawnData = [['Entry #', 'Name']];
+                // ===== SHEET 5: Withdrawals =====
+                const withdrawnData = [['Entry #', 'Name', 'Email', 'Category']];
                 const withdrawnIndices = Array.from(withdrawn).sort((a, b) => a - b);
                 withdrawnIndices.forEach(idx => {
                     if (idx >= csvData.length) return;
@@ -3597,11 +3597,14 @@
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                     const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                     const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || entryId || `Entry ${idx}`);
-                    withdrawnData.push([entryId, name]);
+                    const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
+                    const category = getCategory(row, categoryIdxs);
+                    withdrawnData.push([entryId, name, email, category]);
                 });
                 const withdrawnWs = XLSX.utils.aoa_to_sheet(withdrawnData);
                 XLSX.utils.book_append_sheet(wb, withdrawnWs, 'Withdrawals');
                 // ===== SHEET 6: Raw Data (Last) =====
+
                 const rawDataRows = [csvHeaders, ...csvData];
                 const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
                 XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
