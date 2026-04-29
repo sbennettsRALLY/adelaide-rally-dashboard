@@ -2921,7 +2921,7 @@
                     console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
                     lastSyncTimestamp = Date.now();
                     // Refresh current view if CSV was uploaded (without scrolling to top)
-                    if (currentView === 'doc-chase' || currentView === 'nav-marry') {
+                    if (currentView === 'dashboard' || currentView === 'doc-chase' || currentView === 'nav-marry') {
                         switchView(currentView, false);
                     }
                 } else if (response.status === 401) {
