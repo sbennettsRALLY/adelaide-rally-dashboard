@@ -2502,7 +2502,7 @@
                 document.getElementById('navBar').style.display = 'none';
             }
             if (viewName === 'dashboard') {
-                // Dashboard view - no rendering needed yet
+                updateDashboardTables();
             } else if (viewName === 'csv-data') {
                 renderCsvTable();
             } else if (viewName === 'doc-chase') {
