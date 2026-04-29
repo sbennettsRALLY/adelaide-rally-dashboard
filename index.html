@@ -2781,6 +2781,10 @@
                 console.log('✓ Dropbox REST API sync initialized');
                 // Immediately sync from Dropbox
                 await syncFromDropbox();
+                // Update dashboard after initial sync
+                if (currentView === 'dashboard') {
+                    updateDashboardTables();
+                }
                 // Set up periodic sync
                 dropboxSyncTimer = setInterval(async () => {
                     if (dropboxSyncEnabled) {
@@ -3583,8 +3587,9 @@
                 const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
                 const fileName = `Adelaide_Rally_Export_${timestamp}.xlsx`;
 
-                // Upload to Dropbox only (avoid Protected View by downloading from Dropbox instead of locally)
-                await uploadExcelToDropboxOnly(blob, fileName);
+                // Download directly to user's computer
+                await downloadExcelFile(blob, fileName);
+                alert('✓ Excel file downloaded successfully');
             } catch (err) {
                 console.error('Export error:', err);
                 alert('⚠️ Error exporting to Excel: ' + err.message);
