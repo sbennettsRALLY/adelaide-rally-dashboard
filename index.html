@@ -540,16 +540,16 @@
         </div>
         <div class="nav" id="navBar" style="display: none;">
             <button class="nav-btn active" onclick="switchView('dashboard')">Dashboard</button>
-            <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
             <button class="nav-btn" onclick="switchView('doc-chase')">Document Chase</button>
             <button class="nav-btn" onclick="switchView('ma-licence')">MA Licence Obtain</button>
             <button class="nav-btn" onclick="switchView('nav-marry')">Nav Marry</button>
             <button class="nav-btn" onclick="switchView('withdrawals')">Withdrawals</button>
+            <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
         </div>
     </div>
     <div class="main">
         <!-- Landing View -->
-        <div id="landing" class="view active">
+        <div id="landing" class="view">
             <div style="text-align: center; margin-bottom: 32px;">
                 <h2 style="font-size: 28px; font-weight: 700; margin-bottom: 4px; color: var(--navy);">Adelaide Rally</h2>
                 <p style="font-size: 12px; color: var(--muted);">Shannons Adelaide Rally 2025</p>
@@ -571,7 +571,7 @@
             </p>
         </div>
         <!-- Dashboard View -->
-        <div id="dashboard" class="view">
+        <div id="dashboard" class="view active">
             <div id="dashMsg" class="message"></div>
             <div style="display: flex; gap: 20px; flex-wrap: wrap; padding: 20px;">
                 <!-- Driver Entries Table -->
@@ -867,7 +867,7 @@
         let disclaimerLocked = {}; // Track which entries are locked (found via Dropbox verification)
         let withdrawn = new Set(); // Track withdrawn entrant indices
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
-        let currentView = 'doc-chase';
+        let currentView = 'dashboard';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
         let filterOutstandingPayment = false; // Filter for outstanding payments
         let filterComplete = false; // Filter to hide complete entries
