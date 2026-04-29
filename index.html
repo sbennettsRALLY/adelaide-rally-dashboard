@@ -3255,10 +3255,45 @@
                         const entryB = entryIdIdx >= 0 ? parseInt(csvData[b][entryIdIdx]) || 0 : 0;
                         return entryA - entryB;
                     });
-                // ===== SHEET 1: Raw Data =====
-                const rawDataRows = [csvHeaders, ...csvData];
-                const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
-                XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
+                // ===== SHEET 1: Dashboard =====
+                const dashboardData = [];
+                // Driver Entries section
+                dashboardData.push(['DRIVER ENTRIES']);
+                dashboardData.push(['Category', 'Entries', 'Capacity']);
+                let totalEntries = 0;
+                let totalCapacity = 0;
+                driverEntryConfig.forEach(config => {
+                    const headerIdx = csvHeaders.findIndex(h => h === config.header1);
+                    let entries = 0;
+                    if (headerIdx >= 0) {
+                        entries = csvData.filter(row => row[headerIdx] === config.trigger1).length;
+                    }
+                    totalEntries += entries;
+                    totalCapacity += config.capacity;
+                    dashboardData.push([config.category, entries, config.capacity]);
+                });
+                dashboardData.push(['TOTAL', totalEntries, totalCapacity]);
+                // Add spacing
+                dashboardData.push([]);
+                // Additional Items section
+                dashboardData.push(['ADDITIONAL ITEMS']);
+                dashboardData.push(['Item', 'Quantity', 'Unit Price', 'Total Sales']);
+                let totalQty = 0;
+                let totalSales = 0;
+                additionalItemsConfig.forEach(config => {
+                    const headerIdx = csvHeaders.findIndex(h => h === config.header);
+                    let qty = 0;
+                    if (headerIdx >= 0) {
+                        qty = csvData.filter(row => row[headerIdx] === config.trigger).length;
+                    }
+                    const sales = qty * config.price;
+                    totalQty += qty;
+                    totalSales += sales;
+                    dashboardData.push([config.item, qty, config.price, sales]);
+                });
+                dashboardData.push(['TOTAL', totalQty, '', totalSales]);
+                const dashboardWs = XLSX.utils.aoa_to_sheet(dashboardData);
+                XLSX.utils.book_append_sheet(wb, dashboardWs, 'Dashboard');
                 // ===== SHEET 2: Document Chase =====
                 const docChaseData = [['Entry #', 'Name', 'Phone', 'Email Address', 'Disclaimer Check', 'Photo ID', 'Payment Complete', 'Entry Type', 'Category']];
                 sortedIndices.forEach(idx => {
@@ -3566,6 +3601,10 @@
                 });
                 const withdrawnWs = XLSX.utils.aoa_to_sheet(withdrawnData);
                 XLSX.utils.book_append_sheet(wb, withdrawnWs, 'Withdrawals');
+                // ===== SHEET 6: Raw Data (Last) =====
+                const rawDataRows = [csvHeaders, ...csvData];
+                const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
+                XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
                 // Add workbook properties to mark file as trusted
                 wb.Props = {
                     Title: 'Adelaide Rally Entry Data',
