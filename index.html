@@ -496,13 +496,7 @@
     </style>
     <!-- Dropbox REST API (No SDK needed) -->
     <script>
-        // Set shared Dropbox access token for team sync
-        const DROPBOX_ACCESS_TOKEN = 'sl.u.AGeFNXH_HM1p0GuVBoWvE_sxQh24Zm-7NyR7LX5PMFqsZKoAHEkW6gVEv_rwtH_XzgqpT8LYBFwO_hCNeMMQVs7ueD95IvnxDgjpbVRwoo023h93DnA0ga0i2C0d9i8HbZt97URDbeM_Jv-FzemSy0BLH3FBNZoEJGKRMHhXfiiOzKf_PwOhHZkiY4SH7hI1IM8IImothH0Dsut2RZQEfq6KJe6tAykN-NQqqt--cjqNvgJ-7wMvD6KMyPyWhEcw9YAYizH6LGwgysLJ82S3SuDyY7ENh0HnXJVULOg_HWtWRgk-9orSsRSa9ohoWNxoE2eXTeNseafvntay5R3FL2eOvCMvVi9z8xFo4PQbBdi5NbqzE3oc3yxHtohMOU7OGJTn58rIM5haLTi8Qq5kViSVL40ghPRnalIwB1yB3e8B1l5gcMntSL9FBGGaxZxJgcaHEyo-BHnglVr4XxyiDL5YANJ9p7wFEiw-yv-F3ohCoVDWNn0FJd3oAhAmqFcgdWkk-7Rp4tmwY-IGDmyGdUKtQKPd1UQShp5vr-QnX8KMxAS2ircEtg-kOd6SnBS5vqpxsM7DIHbSTJmUuypR6PZwUtv_sodCmtZxh4VZxAeQspAr3YjHepHUGM_IkOAKCG6f_p00SsWhAOrm-BYGVUvtbU7s6d3ClG-vLpkb3L500CwEiad6mekqLK6-Ug19v5aFgTaHiWCHKy7ckCyRiucvmiWYYC3uX5ek9yJ6Gy6NGo-JQxOXVR-rj_tGVuZSnD5N1SmMFEOAav3oUfRsY-Xhoe73KoxX0YzNXIU8vNTE0Nwso4fLd8JVfS3R8dmMwwUoXOpX9hYfA-8XhEMbI6p-FXGMYKv8o6aFT1s8DwonVsgUrt6RG3CAJF7nrRQ7VnZkV4lmMv59kfgCPI0zU4TTpXs6Oqb5VnD8K2hid_v_czraPHzlyqESJGT7VrmBVo6Kcy2jzIwy3Ew3kQ2E29qXa2eykPeNeNyKuqGbT5UH2qzhTcui_M_bW7Ha3PZyrVXT_2iMgJrF7dmJjMtc9oyiivPiXdZzb2m-ZJVRPVBzgNFyiquy1vILDd3TwlCyupsZ1aPaKQ5qI1G6dikxMj4mTJdHlHzLVVvpcTKKm8IO8jTHU-IyO4snM3VWEvAMdnt8uNCYagUNOyQcCmPTyJJY8LWG94rDiLu5qmChk5RaSZqX0wMpQo3iR2Ag0KdO7_njLoqYOG-XaS1FvkjomPOLhbm-cKV_J69pYkrZJR4P2Mg6b6YYq2NLsGuq2CyLwpskJtdo2_HBZjKGSxBXSzvquaDAjcffLrYRaaxkCmt1DihBH7GbFASjeMPjL2dHXgqreB_5RssVg8FREED3pWf0JqbClQ90_B4KApk1PaDLzSlvvhD90exj9WGOblEu3c8lvD67S3z0feymAY_z--Mu';
-
-        if (!localStorage.getItem('dropbox_access_token')) {
-            localStorage.setItem('dropbox_access_token', DROPBOX_ACCESS_TOKEN);
-            console.log('✓ Dropbox access token initialized');
-        }
+        // OAuth token management - no hardcoded tokens (uses OAuth flow instead)
     </script>
 
 </head>
