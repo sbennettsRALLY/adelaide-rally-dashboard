@@ -573,35 +573,35 @@
         <!-- Dashboard View -->
         <div id="dashboard" class="view active">
             <div id="dashMsg" class="message"></div>
-            <div style="padding: 20px;">
-                <!-- Top Row: Driver Entries & Entry Summary -->
-                <div style="display: flex; gap: 20px; margin-bottom: 20px;">
-                    <!-- Driver Entries Table -->
-                    <div style="flex: 1; min-width: 400px;">
-                        <div class="sec-title">Driver Entry Summary</div>
-                        <div class="tbl-wrap">
-                            <table id="driverEntriesTable" style="width: 100%; border-collapse: collapse;">
-                                <thead style="background: var(--navy-mid); color: white;">
-                                    <tr>
-                                        <th style="padding: 10px; text-align: left; border: 1px solid var(--border);">Category</th>
-                                        <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Entries</th>
-                                        <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Capacity</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="driverEntriesBody"></tbody>
-                                <tfoot style="background: var(--bg); font-weight: bold;">
-                                    <tr>
-                                        <td style="padding: 10px; border: 1px solid var(--border);">TOTAL</td>
-                                        <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalEntries">0</td>
-                                        <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalCapacity">0</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
+            <div style="padding: 20px; display: flex; gap: 20px;">
+                <!-- Left Column: Driver Entries -->
+                <div style="flex: 1; min-width: 400px;">
+                    <div class="sec-title">Driver Entry Summary</div>
+                    <div class="tbl-wrap">
+                        <table id="driverEntriesTable" style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: var(--navy-mid); color: white;">
+                                <tr>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid var(--border);">Category</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Entries</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Capacity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="driverEntriesBody"></tbody>
+                            <tfoot style="background: var(--bg); font-weight: bold;">
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid var(--border);">TOTAL</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalEntries">0</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalCapacity">0</td>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
+                </div>
 
+                <!-- Right Column: Entry Summary & Additional Items -->
+                <div style="flex: 1; min-width: 400px; display: flex; flex-direction: column; gap: 20px;">
                     <!-- Entry Summary Table -->
-                    <div style="flex: 1; min-width: 400px;">
+                    <div>
                         <div class="sec-title">Entry Summary</div>
                         <div class="tbl-wrap">
                             <table id="entrySalesTable" style="width: 100%; border-collapse: collapse;">
@@ -623,11 +623,9 @@
                             </table>
                         </div>
                     </div>
-                </div>
 
-                <!-- Bottom Row: Additional Items Table -->
-                <div style="display: flex; gap: 20px;">
-                    <div style="flex: 1; min-width: 400px;">
+                    <!-- Additional Items Table -->
+                    <div>
                         <div class="sec-title">Additional Items Sales</div>
                         <div class="tbl-wrap">
                             <table id="additionalItemsTable" style="width: 100%; border-collapse: collapse;">
@@ -1438,12 +1436,12 @@
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td style="padding: 10px; border: 1px solid var(--border);">${category}</td>
                     <td style="padding: 10px; text-align: center; border: 1px solid var(--border);">${sales.entries}</td>
-                    <td style="padding: 10px; text-align: right; border: 1px solid var(--border);">$${sales.income.toFixed(2)}</td>`;
+                    <td style="padding: 10px; text-align: right; border: 1px solid var(--border);">$${sales.income.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>`;
                 entrySalesBody.appendChild(tr);
             });
 
             document.getElementById('totalSalesEntries').textContent = totalSalesEntries;
-            document.getElementById('totalSalesIncome').textContent = '$' + totalSalesIncome.toFixed(2);
+            document.getElementById('totalSalesIncome').textContent = '$' + totalSalesIncome.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         }
 
         function renderDocTable() {
