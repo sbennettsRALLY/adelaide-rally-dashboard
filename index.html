@@ -621,6 +621,30 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Entry Sales Table -->
+                <div style="flex: 1; min-width: 400px;">
+                    <div class="sec-title">Entry Sales</div>
+                    <div class="tbl-wrap">
+                        <table id="entrySalesTable" style="width: 100%; border-collapse: collapse;">
+                            <thead style="background: var(--navy-mid); color: white;">
+                                <tr>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid var(--border);">Category</th>
+                                    <th style="padding: 10px; text-align: center; border: 1px solid var(--border);">Entries</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid var(--border);">Income ($)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="entrySalesBody"></tbody>
+                            <tfoot style="background: var(--bg); font-weight: bold;">
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid var(--border);">TOTAL</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);" id="totalSalesEntries">0</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid var(--border);" id="totalSalesIncome">$0.00</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
         <!-- CSV Data View -->
@@ -1291,6 +1315,28 @@
             {item: 'Media Pack', price: 268.18, header: 'I would like to purchase a media pack', trigger: 'Photo Pack inc. 10 x photos'}
         ];
 
+        // Entry Sales configuration (from Entry Number Tracking.xlsx Entrants tab)
+        const entryFeeConfig = [
+            {category: 'Zagame', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Solitaire', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Glenelg BMW', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'BMW MINI', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Mercedes', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Honda', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Hyundai', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Porsche Centre', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Porsche Club', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Ferrari Club', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Main Tour', entryFee: 2631.82, isBrandedTour: false},
+            {category: 'Spirit Tour', entryFee: 2904.55, isBrandedTour: false},
+            {category: 'TSD', entryFee: 2995.45, isBrandedTour: false},
+            {category: 'Challenge 120', entryFee: 3177.27, isBrandedTour: false},
+            {category: 'Challenge 130', entryFee: 3631.82, isBrandedTour: false},
+            {category: 'Comp/Rally Pro', entryFee: 4177.27, isBrandedTour: false},
+            {category: 'Prima Tour', entryFee: 713.64, isBrandedTour: false},
+            {category: 'Tour Leader / Follower', entryFee: 0.00, isBrandedTour: false}
+        ];
+
         function updateDashboardTables() {
             if (csvData.length === 0) return;
 
@@ -1344,6 +1390,55 @@
 
             document.getElementById('totalItemQty').textContent = totalQty;
             document.getElementById('totalItemSales').textContent = '$' + totalSales.toFixed(2);
+
+            // Update entry sales
+            let totalSalesEntries = 0;
+            let totalSalesIncome = 0;
+            const entrySalesBody = document.getElementById('entrySalesBody');
+            entrySalesBody.innerHTML = '';
+
+            // Calculate entries per category and group branded tours
+            const categorySales = {};
+            driverEntryConfig.forEach(config => {
+                const headerIdx = csvHeaders.findIndex(h => h === config.header1);
+                let entries = 0;
+                if (headerIdx >= 0) {
+                    entries = csvData.filter(row => row[headerIdx] === config.trigger1).length;
+                }
+
+                // Find entry fee for this category
+                const feeConfig = entryFeeConfig.find(c => c.category === config.category);
+                const entryFee = feeConfig ? feeConfig.entryFee : 0;
+                const income = entries * entryFee;
+
+                // Check if this is a branded tour
+                if (feeConfig && feeConfig.isBrandedTour) {
+                    // Consolidate into "Branded Tour" category
+                    if (!categorySales['Branded Tour']) {
+                        categorySales['Branded Tour'] = { entries: 0, income: 0 };
+                    }
+                    categorySales['Branded Tour'].entries += entries;
+                    categorySales['Branded Tour'].income += income;
+                } else {
+                    categorySales[config.category] = { entries, income };
+                }
+            });
+
+            // Display consolidated sales data
+            Object.keys(categorySales).forEach(category => {
+                const sales = categorySales[category];
+                totalSalesEntries += sales.entries;
+                totalSalesIncome += sales.income;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td style="padding: 10px; border: 1px solid var(--border);">${category}</td>
+                    <td style="padding: 10px; text-align: center; border: 1px solid var(--border);">${sales.entries}</td>
+                    <td style="padding: 10px; text-align: right; border: 1px solid var(--border);">$${sales.income.toFixed(2)}</td>`;
+                entrySalesBody.appendChild(tr);
+            });
+
+            document.getElementById('totalSalesEntries').textContent = totalSalesEntries;
+            document.getElementById('totalSalesIncome').textContent = '$' + totalSalesIncome.toFixed(2);
         }
 
         function renderDocTable() {
