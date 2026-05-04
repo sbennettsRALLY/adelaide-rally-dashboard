@@ -1917,7 +1917,8 @@
             csvData.forEach((row, idx) => {
                 if (withdrawn.has(idx)) return; // Skip withdrawn entrants
                 const entryType = mainEntryTypeIdx >= 0 ? row[mainEntryTypeIdx]?.toLowerCase().trim() : '';
-                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] : '';
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId) return; // Skip rows with empty Entry ID
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] : '';
                 const phone = phoneIdx >= 0 ? row[phoneIdx] : '';
@@ -2397,6 +2398,8 @@
             sortedIndices.forEach(idx => {
                 if (withdrawn.has(idx)) return; // Skip withdrawn entrants
                 const row = csvData[idx];
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId) return; // Skip rows with empty Entry ID
                 const licenceValue = licenceIdx >= 0 ? row[licenceIdx] : '';
                 // Only show entries where licence value begins with "No"
                 if (!licenceValue.toLowerCase().trim().startsWith('no')) {
@@ -2405,7 +2408,6 @@
                 // Search filter
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
-                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
                 const searchableText = [entryId, firstName, lastName].join(' ').toLowerCase();
                 if (!searchableText.includes(searchTerm)) {
                     return;
