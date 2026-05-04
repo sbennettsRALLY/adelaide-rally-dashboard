@@ -1726,9 +1726,13 @@
                     return entryA - entryB;
                 });
             // Apply filters using sorted order, skipping withdrawn entries to match renderDocTable's row building
+            const rows = document.getElementById('docBody').querySelectorAll('tr');
             let visibleRowIndex = 0;
             sortedIndices.forEach((idx) => {
                 if (withdrawn.has(idx)) return; // Skip withdrawn entrants - matches renderDocTable behavior
+
+                const entryIdValue = entryIdIdx >= 0 ? (csvData[idx][entryIdIdx] || '').trim() : '';
+                if (!entryIdValue) return; // Skip rows with empty Entry ID
 
                 const row = csvData[idx];
                 const entryType = entryTypeIdx >= 0 ? row[entryTypeIdx] : '';
@@ -1916,9 +1920,10 @@
             const navigators = [];
             csvData.forEach((row, idx) => {
                 if (withdrawn.has(idx)) return; // Skip withdrawn entrants
-                const entryType = mainEntryTypeIdx >= 0 ? row[mainEntryTypeIdx]?.toLowerCase().trim() : '';
                 const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                 if (!entryId) return; // Skip rows with empty Entry ID
+                const entryType = mainEntryTypeIdx >= 0 ? (row[mainEntryTypeIdx] || '').toLowerCase().trim() : '';
+                if (!entryType) return; // Skip rows with empty Entry Type
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] : '';
                 const phone = phoneIdx >= 0 ? row[phoneIdx] : '';
