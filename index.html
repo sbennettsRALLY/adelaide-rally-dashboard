@@ -1514,14 +1514,14 @@
                 });
             sortedIndices.forEach(idx => {
                 if (withdrawn.has(idx)) return; // Skip withdrawn entrants
-                const entryId = entryIdIdx >= 0 ? (csvData[idx][entryIdIdx] || '').trim() : '';
-                if (!entryId) return; // Skip rows with empty Entry ID
                 const row = csvData[idx];
+                const entryIdValue = entryIdIdx >= 0 ? (csvData[idx][entryIdIdx] || '').trim() : '';
+                if (!entryIdValue) return; // Skip rows with empty Entry ID
                 const tr = document.createElement('tr');
                 // Column order: Entry #, Name, Phone, Email, Disclaimer Check, Photo ID, Payment Complete, Entry Type, Category
                 // 1. Entry ID
                 const tdEntryId = document.createElement('td');
-                tdEntryId.textContent = entryId;
+                tdEntryId.textContent = entryIdValue;
                 tr.appendChild(tdEntryId);
                 // 2. Combined Name
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
