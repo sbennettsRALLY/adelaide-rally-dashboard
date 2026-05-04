@@ -1726,7 +1726,6 @@
                     return entryA - entryB;
                 });
             // Apply filters using sorted order, skipping withdrawn entries to match renderDocTable's row building
-            const rows = document.getElementById('docBody').querySelectorAll('tr');
             let visibleRowIndex = 0;
             sortedIndices.forEach((idx) => {
                 if (withdrawn.has(idx)) return; // Skip withdrawn entrants - matches renderDocTable behavior
