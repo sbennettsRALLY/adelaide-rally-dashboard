@@ -1777,14 +1777,8 @@
 
                 const row = csvData[idx];
                 const entryType = entryTypeIdx >= 0 ? row[entryTypeIdx] : '';
-                // Get category (first non-empty "I am entering" column)
-                let category = '';
-                for (let cidx of categoryIdxs) {
-                    if (row[cidx] && row[cidx].trim()) {
-                        category = row[cidx];
-                        break;
-                    }
-                }
+                // Get category using getCategory helper to handle Branded Tours properly
+                const category = getCategory(row, categoryIdxs);
                 // Search across key fields
                 const categoryVals = categoryIdxs.map(cidx => row[cidx] || '');
                 const paymentAmount = paymentAmountIdx >= 0 ? row[paymentAmountIdx] : '';
