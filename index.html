@@ -2925,10 +2925,13 @@
                 if (currentView === 'dashboard') {
                     updateDashboardTables();
                 }
-                // Set up periodic sync
+                // Set up periodic bidirectional sync: push local changes, then pull remote changes
                 dropboxSyncTimer = setInterval(async () => {
                     if (dropboxSyncEnabled) {
-                        await syncFromDropbox();
+                        // Push local changes to Dropbox
+                        await syncToDropbox().catch(e => console.warn('⚠ Auto-save to Dropbox failed:', e));
+                        // Pull changes from other users
+                        await syncFromDropbox().catch(e => console.warn('⚠ Auto-sync from Dropbox failed:', e));
                     }
                 }, DROPBOX_SYNC_INTERVAL);
             } catch (error) {
@@ -3008,8 +3011,9 @@
                 if (response.ok) {
                     const text = await response.text();
                     const remoteState = JSON.parse(text);
+                    let hasChanges = false;
 
-                    // MERGE STRATEGY: Combine data from multiple users instead of overwriting
+                    // MERGE STRATEGY: Intelligently merge user-input fields without overwriting local state
                     // For CSV entries: keep all unique entries from both local and remote
                     if (remoteState.csvData && remoteState.csvHeaders) {
                         // Use remote headers as source of truth
@@ -3032,41 +3036,85 @@
                             const remoteEntryId = entryIdIdx >= 0 ? remoteRow[entryIdIdx] : null;
                             if (remoteEntryId && !existingEntryIds.has(remoteEntryId)) {
                                 csvData.push(remoteRow);
+                                hasChanges = true;
                             }
                         });
-                        console.log('✓ Merged CSV data - Total entries now:', csvData.length);
+                        if (hasChanges) {
+                            console.log('✓ Merged CSV data - Total entries now:', csvData.length);
+                        }
                     }
 
-                    // For settings: use last-write-wins based on timestamp
-                    const remoteTimestamp = remoteState.timestamp || 0;
-                    const localTimestamp = lastSyncTimestamp || 0;
+                    // UNION-BASED MERGE for user-input fields: keep ALL values from both local and remote
+                    // This ensures no checkbox data is lost when syncing across multiple users
+                    let stateUpdated = false;
 
-                    if (remoteTimestamp >= localTimestamp) {
-                        // Remote is newer or same age, use remote settings
-                        if (remoteState.docVerified) docVerified = remoteState.docVerified;
-                        if (remoteState.photoIdVerified) photoIdVerified = remoteState.photoIdVerified;
-                        if (remoteState.disclaimerChecked) disclaimerChecked = remoteState.disclaimerChecked;
-                        if (remoteState.disclaimerLocked) disclaimerLocked = remoteState.disclaimerLocked;
-                        if (remoteState.withdrawn) withdrawn = new Set(remoteState.withdrawn);
+                    // Merge docVerified: both local and remote true values win
+                    if (remoteState.docVerified && typeof remoteState.docVerified === 'object') {
+                        const merged = { ...remoteState.docVerified, ...docVerified };
+                        if (JSON.stringify(merged) !== JSON.stringify(docVerified)) {
+                            docVerified = merged;
+                            stateUpdated = true;
+                        }
                     }
-                    // else: keep local settings as they're newer
+
+                    // Merge photoIdVerified: both local and remote true values win
+                    if (remoteState.photoIdVerified && typeof remoteState.photoIdVerified === 'object') {
+                        const merged = { ...remoteState.photoIdVerified, ...photoIdVerified };
+                        if (JSON.stringify(merged) !== JSON.stringify(photoIdVerified)) {
+                            photoIdVerified = merged;
+                            stateUpdated = true;
+                        }
+                    }
+
+                    // Merge disclaimerChecked: both local and remote true values win
+                    if (remoteState.disclaimerChecked && typeof remoteState.disclaimerChecked === 'object') {
+                        const merged = { ...remoteState.disclaimerChecked, ...disclaimerChecked };
+                        if (JSON.stringify(merged) !== JSON.stringify(disclaimerChecked)) {
+                            disclaimerChecked = merged;
+                            stateUpdated = true;
+                        }
+                    }
+
+                    // Merge disclaimerLocked: both local and remote true values win
+                    if (remoteState.disclaimerLocked && typeof remoteState.disclaimerLocked === 'object') {
+                        const merged = { ...remoteState.disclaimerLocked, ...disclaimerLocked };
+                        if (JSON.stringify(merged) !== JSON.stringify(disclaimerLocked)) {
+                            disclaimerLocked = merged;
+                            stateUpdated = true;
+                        }
+                    }
+
+                    // Merge withdrawn set: combine all withdrawn entry IDs from both local and remote
+                    if (remoteState.withdrawn && Array.isArray(remoteState.withdrawn)) {
+                        const remoteWithdrawn = new Set(remoteState.withdrawn);
+                        const merged = new Set([...withdrawn, ...remoteWithdrawn]);
+                        if (merged.size !== withdrawn.size) {
+                            withdrawn = merged;
+                            stateUpdated = true;
+                        }
+                    }
 
                     // Merge navigation marry entries - combine both arrays
                     if (remoteState.navigationMarryEntries) {
                         const localMarrySet = new Set(navigationMarryEntries.map(e => JSON.stringify(e)));
+                        let marryUpdated = false;
                         remoteState.navigationMarryEntries.forEach(remoteEntry => {
                             const entryStr = JSON.stringify(remoteEntry);
                             if (!localMarrySet.has(entryStr)) {
                                 navigationMarryEntries.push(remoteEntry);
+                                marryUpdated = true;
                             }
                         });
+                        stateUpdated = stateUpdated || marryUpdated;
                     }
 
-                    console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
-                    lastSyncTimestamp = Date.now();
-                    // Refresh current view if CSV was uploaded (without scrolling to top)
-                    if (currentView === 'dashboard' || currentView === 'doc-chase' || currentView === 'nav-marry') {
-                        switchView(currentView, false);
+                    if (hasChanges || stateUpdated) {
+                        console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
+                        lastSyncTimestamp = Date.now();
+                        // Refresh current view if data changed (without scrolling to top)
+                        if (currentView === 'dashboard' || currentView === 'doc-chase' || currentView === 'nav-marry') {
+                            switchView(currentView, false);
+                        }
                     }
                 } else if (response.status === 401) {
                     console.warn('⚠ Token expired, attempting refresh...');
