@@ -2928,10 +2928,12 @@
                 // Set up periodic bidirectional sync: push local changes, then pull remote changes
                 dropboxSyncTimer = setInterval(async () => {
                     if (dropboxSyncEnabled) {
+                        console.log(`ℹ Sync cycle starting (every ${DROPBOX_SYNC_INTERVAL/1000}s)...`);
                         // Push local changes to Dropbox
                         await syncToDropbox().catch(e => console.warn('⚠ Auto-save to Dropbox failed:', e));
                         // Pull changes from other users
                         await syncFromDropbox().catch(e => console.warn('⚠ Auto-sync from Dropbox failed:', e));
+                        console.log('ℹ Sync cycle complete');
                     }
                 }, DROPBOX_SYNC_INTERVAL);
             } catch (error) {
@@ -3011,6 +3013,7 @@
                 if (response.ok) {
                     const text = await response.text();
                     const remoteState = JSON.parse(text);
+                    console.log('ℹ Remote state pulled from Dropbox, merging...');
                     let hasChanges = false;
 
                     // MERGE STRATEGY: Intelligently merge user-input fields without overwriting local state
@@ -3115,6 +3118,8 @@
                         if (currentView === 'dashboard' || currentView === 'doc-chase' || currentView === 'nav-marry') {
                             switchView(currentView, false);
                         }
+                    } else {
+                        console.log('ℹ Sync complete - no changes detected');
                     }
                 } else if (response.status === 401) {
                     console.warn('⚠ Token expired, attempting refresh...');
