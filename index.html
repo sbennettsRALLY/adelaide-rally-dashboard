@@ -1555,10 +1555,10 @@
                     return entryA - entryB;
                 });
             sortedIndices.forEach(idx => {
-                if (withdrawn.has(idx)) return; // Skip withdrawn entrants
                 const row = csvData[idx];
                 const entryIdValue = entryIdIdx >= 0 ? (csvData[idx][entryIdIdx] || '').trim() : '';
                 if (!entryIdValue) return; // Skip rows with empty Entry ID
+                if (withdrawn.has(entryIdValue)) return; // Skip withdrawn entrants
                 const tr = document.createElement('tr');
                 // Column order: Entry #, Name, Phone, Email, Disclaimer Check, Photo ID, Payment Complete, Entry Type, Category
                 // 1. Entry ID
@@ -1770,10 +1770,9 @@
             // Apply filters using sorted order, skipping withdrawn entries to match renderDocTable's row building
             let visibleRowIndex = 0;
             sortedIndices.forEach((idx) => {
-                if (withdrawn.has(idx)) return; // Skip withdrawn entrants - matches renderDocTable behavior
-
                 const entryIdValue = entryIdIdx >= 0 ? (csvData[idx][entryIdIdx] || '').trim() : '';
                 if (!entryIdValue) return; // Skip rows with empty Entry ID
+                if (withdrawn.has(entryIdValue)) return; // Skip withdrawn entrants - matches renderDocTable behavior
 
                 const row = csvData[idx];
                 const entryType = entryTypeIdx >= 0 ? row[entryTypeIdx] : '';
@@ -1885,10 +1884,9 @@
             const paymentAmountIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('payment ammount') || h.toLowerCase().includes('payment amount'));
             const paymentCompletedIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('payment completed'));
             csvData.forEach((row, idx) => {
-                if (withdrawn.has(idx)) return; // Skip withdrawn entrants
-                total++;
-                // Extract entry ID for looking up checkbox states
                 const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                if (withdrawn.has(entryId)) return; // Skip withdrawn entrants
+                total++;
                 // Count missing photo ID - entries WITHOUT a checkmark in photo id column
                 if (!photoIdVerified[entryId]) {
                     missingPhotoId++;
@@ -1954,9 +1952,9 @@
             const drivers = [];
             const navigators = [];
             csvData.forEach((row, idx) => {
-                if (withdrawn.has(idx)) return; // Skip withdrawn entrants
                 const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                 if (!entryId) return; // Skip rows with empty Entry ID
+                if (withdrawn.has(entryId)) return; // Skip withdrawn entrants
                 const entryType = mainEntryTypeIdx >= 0 ? (row[mainEntryTypeIdx] || '').toLowerCase().trim() : '';
                 if (!entryType) return; // Skip rows with empty Entry Type
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] : '';
@@ -2436,10 +2434,10 @@
             const searchTerm = document.getElementById('maSearch').value.toLowerCase();
             let matchCount = 0;
             sortedIndices.forEach(idx => {
-                if (withdrawn.has(idx)) return; // Skip withdrawn entrants
                 const row = csvData[idx];
                 const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                 if (!entryId) return; // Skip rows with empty Entry ID
+                if (withdrawn.has(entryId)) return; // Skip withdrawn entrants
                 const licenceValue = licenceIdx >= 0 ? row[licenceIdx] : '';
                 // Only show entries where licence value begins with "No"
                 if (!licenceValue.toLowerCase().trim().startsWith('no')) {
@@ -3185,10 +3183,10 @@
             activeBody.innerHTML = '';
             let activeCount = 0;
             csvData.forEach((row, idx) => {
-                if (withdrawn.has(idx)) return; // Skip withdrawn
+                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                if (withdrawn.has(entryId)) return; // Skip withdrawn
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
-                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
                 const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
                 const fullName = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || entryId || `Entry ${idx}`);
                 // Use the same getCategory function as Document Chase to handle Branded Tours
@@ -3250,15 +3248,25 @@
             withdrawnBody.innerHTML = '';
             let withdrawnCount = 0;
             const withdrawnSearchTerm = document.getElementById('withdrawnSearch').value.toLowerCase();
-            const withdrawnIndices = Array.from(withdrawn).sort((a, b) => a - b);
-            withdrawnIndices.forEach(idx => {
-                if (idx >= csvData.length) return; // Safety check
-                const row = csvData[idx];
+            // Convert withdrawn entryIds to sorted array for display
+            const withdrawnEntryIds = Array.from(withdrawn).sort((a, b) => {
+                const aNum = parseInt(a) || 0;
+                const bNum = parseInt(b) || 0;
+                return aNum - bNum;
+            });
+            withdrawnEntryIds.forEach(withdrawnEntryId => {
+                // Find the row in csvData that matches this entry ID
+                const rowIdx = csvData.findIndex(row => {
+                    const eid = entryIdIdx >= 0 ? row[entryIdIdx] : '';
+                    return eid === withdrawnEntryId;
+                });
+                if (rowIdx < 0) return; // Entry not found in current data
+                const row = csvData[rowIdx];
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
-                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                const entryId = withdrawnEntryId;
                 const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
-                const fullName = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || entryId || `Entry ${idx}`);
+                const fullName = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || entryId || `Entry ${rowIdx}`);
 
                 // Get category
                 let category = '';
@@ -3327,7 +3335,7 @@
                 btnRestore.style.border = 'none';
                 btnRestore.style.borderRadius = '4px';
                 btnRestore.style.cursor = 'pointer';
-                btnRestore.onclick = () => restoreEntrant(idx);
+                btnRestore.onclick = () => restoreEntrant(withdrawnEntryId);
                 tdAction.appendChild(btnRestore);
                 tr.appendChild(tdAction);
                 withdrawnBody.appendChild(tr);
@@ -3338,22 +3346,26 @@
         }
         function withdrawEntrant(idx) {
             if (confirm(`Are you sure you want to withdraw this entrant?`)) {
-                withdrawn.add(idx);
-                saveToStorage();
-                renderWithdrawalTab();
-                // Update all other views to reflect the withdrawal
-                renderDocTable();
-                updateDocStats();
-                filterDocuments();
-                renderMALicenceTable();
-                renderNavMarryTable();
-                filterCsvTable();
-                showMessage('withdrawMsg', 'success', '✓ Entrant withdrawn');
+                const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                const entryId = entryIdIdx >= 0 ? csvData[idx][entryIdIdx] : '';
+                if (entryId) {
+                    withdrawn.add(entryId);
+                    saveToStorage();
+                    renderWithdrawalTab();
+                    // Update all other views to reflect the withdrawal
+                    renderDocTable();
+                    updateDocStats();
+                    filterDocuments();
+                    renderMALicenceTable();
+                    renderNavMarryTable();
+                    filterCsvTable();
+                    showMessage('withdrawMsg', 'success', '✓ Entrant withdrawn');
+                }
             }
         }
-        function restoreEntrant(idx) {
+        function restoreEntrant(entryId) {
             if (confirm(`Are you sure you want to restore this entrant?`)) {
-                withdrawn.delete(idx);
+                withdrawn.delete(entryId);
                 saveToStorage();
                 renderWithdrawalTab();
                 // Update all other views to reflect the restoration
@@ -3439,9 +3451,9 @@
                 // ===== SHEET 2: Document Chase =====
                 const docChaseData = [['Entry #', 'Name', 'Phone', 'Email Address', 'Disclaimer Check', 'Photo ID', 'Payment Complete', 'Entry Type', 'Category']];
                 sortedIndices.forEach(idx => {
-                    if (withdrawn.has(idx)) return;
                     const row = csvData[idx];
                     const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                    if (withdrawn.has(entryId)) return;
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                     const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                     const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
@@ -3495,11 +3507,11 @@
                 medicalIdxs.sort((a, b) => a.order - b.order);
                 const maLicenceData = [['Entry #', 'Name', 'DOB', ...addressIdxs.map((_, i) => `Address ${i + 1}`), 'Fit & Proper', 'Crashtag Consent', ...medicalIdxs.map(m => m.condensed)]];
                 sortedIndices.forEach(idx => {
-                    if (withdrawn.has(idx)) return;
                     const row = csvData[idx];
+                    const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                    if (withdrawn.has(entryId)) return;
                     const licenceValue = licenceIdx >= 0 ? row[licenceIdx] : '';
                     if (!licenceValue.toLowerCase().trim().startsWith('no')) return;
-                    const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                     const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                     const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
@@ -3528,10 +3540,10 @@
                 const drivers = [];
                 const navigators = [];
                 sortedIndices.forEach(idx => {
-                    if (withdrawn.has(idx)) return;
                     const row = csvData[idx];
-                    const entryType = mainEntryTypeIdx >= 0 ? row[mainEntryTypeIdx]?.toLowerCase().trim() : '';
                     const entryId = entryIdIdx >= 0 ? row[entryIdIdx] : '';
+                    if (withdrawn.has(entryId)) return;
+                    const entryType = mainEntryTypeIdx >= 0 ? row[mainEntryTypeIdx]?.toLowerCase().trim() : '';
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] : '';
                     const lastName = lastNameIdx >= 0 ? row[lastNameIdx] : '';
                     const phone = phoneIdx >= 0 ? row[phoneIdx] : '';
