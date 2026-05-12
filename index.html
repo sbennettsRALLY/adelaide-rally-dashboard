@@ -1420,7 +1420,7 @@
                 const headerIdx = csvHeaders.findIndex(h => h === config.header);
                 let qty = 0;
                 if (headerIdx >= 0) {
-                    qty = csvData.filter(row => row[headerIdx] === config.trigger).length;
+                    qty = csvData.filter(row => (row[headerIdx] || '').toLowerCase() === config.trigger.toLowerCase()).length;
                 }
                 const sales = qty * config.price;
                 totalQty += qty;
@@ -3491,7 +3491,7 @@
                     const headerIdx = csvHeaders.findIndex(h => h === config.header);
                     let qty = 0;
                     if (headerIdx >= 0) {
-                        qty = csvData.filter(row => row[headerIdx] === config.trigger).length;
+                        qty = csvData.filter(row => (row[headerIdx] || '').toLowerCase() === config.trigger.toLowerCase()).length;
                     }
                     const sales = qty * config.price;
                     totalQty += qty;
