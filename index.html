@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.1 - CSV upload fix applied 2026-06-18 -->
+<!-- Adelaide Rally 2026 Dashboard v2.2 - Dropbox status indicator fix applied 2026-06-18 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -127,6 +127,11 @@
             display: inline-block;
             background: rgba(34, 197, 94, 0.2);
             color: #22C55E;
+        }
+        .dropbox-status.sync-error {
+            display: inline-block;
+            background: rgba(220, 38, 38, 0.2);
+            color: #f87171;
         }
         .file-input {
             display: none;
@@ -2875,7 +2880,8 @@
                         console.warn('⚠ Refresh token expired, re-authentication required');
                         localStorage.removeItem('dropbox_access_token');
                         localStorage.removeItem('dropbox_refresh_token');
-                        updateDropboxStatus();
+                        localStorage.removeItem('dropbox_token_expires_at');
+                        updateDropboxStatus('Session expired — reconnect');
                         return false;
                     }
                 }
@@ -2885,17 +2891,40 @@
             }
         }
 
-        function updateDropboxStatus() {
+        function updateDropboxStatus(errorMsg) {
             const token = localStorage.getItem('dropbox_access_token');
             const authBtn = document.getElementById('dropboxAuthBtn');
             const statusDiv = document.getElementById('dropboxStatus');
 
-            if (token) {
-                authBtn.style.display = 'none';
-                statusDiv.classList.add('connected');
-            } else {
+            if (errorMsg) {
+                // Sync is failing — show error state and reconnect button
                 authBtn.style.display = 'inline-block';
                 statusDiv.classList.remove('connected');
+                statusDiv.classList.add('sync-error');
+                statusDiv.textContent = '⚠ ' + errorMsg;
+                statusDiv.style.display = 'inline-block';
+                dropboxSyncEnabled = false;
+            } else if (token) {
+                // Token present — show connected with last sync time
+                authBtn.style.display = 'none';
+                statusDiv.classList.remove('sync-error');
+                statusDiv.classList.add('connected');
+                if (lastSyncTimestamp) {
+                    const d = new Date(lastSyncTimestamp);
+                    const hh = String(d.getHours()).padStart(2, '0');
+                    const mm = String(d.getMinutes()).padStart(2, '0');
+                    const ss = String(d.getSeconds()).padStart(2, '0');
+                    statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss;
+                } else {
+                    statusDiv.textContent = '✓ Connected';
+                }
+                statusDiv.style.display = 'inline-block';
+            } else {
+                // No token — show reconnect button
+                authBtn.style.display = 'inline-block';
+                statusDiv.classList.remove('connected');
+                statusDiv.classList.remove('sync-error');
+                statusDiv.style.display = 'none';
             }
         }
 
@@ -2984,19 +3013,24 @@
                     const responseData = await response.json();
                     console.log('✓ Synced to Dropbox at:', DROPBOX_STATE_FILE);
                     lastSyncTimestamp = Date.now();
+                    updateDropboxStatus();
                 } else if (response.status === 401) {
                     console.warn('⚠ Token expired, attempting refresh...');
                     const refreshed = await refreshDropboxToken();
                     if (refreshed) {
                         // Retry the sync with new token
                         await syncToDropbox();
+                    } else {
+                        updateDropboxStatus('Session expired — reconnect');
                     }
                 } else {
                     const errorText = await response.text();
                     console.warn('⚠ Dropbox sync failed:', response.status, errorText);
+                    updateDropboxStatus('Sync failed (' + response.status + ')');
                 }
             } catch (error) {
                 console.warn('⚠ Error syncing to Dropbox:', error.message);
+                updateDropboxStatus('Sync error — reconnect');
             }
         }
         async function syncFromDropbox() {
@@ -3121,12 +3155,15 @@
                     if (hasChanges || stateUpdated) {
                         console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
                         lastSyncTimestamp = Date.now();
+                        updateDropboxStatus();
                         // Refresh current view if data changed (without scrolling to top)
                         if (currentView === 'dashboard' || currentView === 'doc-chase' || currentView === 'nav-marry') {
                             switchView(currentView, false);
                         }
                     } else {
                         console.log('ℹ Sync complete - no changes detected');
+                        lastSyncTimestamp = Date.now();
+                        updateDropboxStatus();
                     }
                 } else if (response.status === 401) {
                     console.warn('⚠ Token expired, attempting refresh...');
@@ -3134,6 +3171,8 @@
                     if (refreshed) {
                         // Retry the sync with new token
                         await syncFromDropbox();
+                    } else {
+                        updateDropboxStatus('Session expired — reconnect');
                     }
                 } else if (response.status === 409) {
                     // File doesn't exist yet, that's OK
@@ -3141,9 +3180,11 @@
                 } else {
                     const errorText = await response.text();
                     console.warn('⚠ Failed to sync from Dropbox:', response.status, errorText);
+                    updateDropboxStatus('Sync failed (' + response.status + ')');
                 }
             } catch (error) {
                 console.warn('⚠ Error syncing from Dropbox:', error.message);
+                updateDropboxStatus('Sync error — reconnect');
             }
         }
         async function loadFromDropbox() {
