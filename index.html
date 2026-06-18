@@ -2925,14 +2925,15 @@
                 if (currentView === 'dashboard') {
                     updateDashboardTables();
                 }
-                // Set up periodic bidirectional sync: push local changes, then pull remote changes
+                // Set up periodic bidirectional sync: pull remote changes first, then push merged state
+                // IMPORTANT: pull must come before push so we don't overwrite other users' changes
                 dropboxSyncTimer = setInterval(async () => {
                     if (dropboxSyncEnabled) {
                         console.log(`ℹ Sync cycle starting (every ${DROPBOX_SYNC_INTERVAL/1000}s)...`);
-                        // Push local changes to Dropbox
-                        await syncToDropbox().catch(e => console.warn('⚠ Auto-save to Dropbox failed:', e));
-                        // Pull changes from other users
+                        // Pull first: merge any changes from other users into local state
                         await syncFromDropbox().catch(e => console.warn('⚠ Auto-sync from Dropbox failed:', e));
+                        // Push second: upload the merged state (includes both local and remote changes)
+                        await syncToDropbox().catch(e => console.warn('⚠ Auto-save to Dropbox failed:', e));
                         console.log('ℹ Sync cycle complete');
                     }
                 }, DROPBOX_SYNC_INTERVAL);
