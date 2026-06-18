@@ -1121,6 +1121,11 @@
             reader.onload = async (ev) => {
                 try {
                     parseCSV(ev.target.result);
+                    // IMPORTANT: pull from Dropbox first so we don't overwrite other users' checkbox changes
+                    // when uploading a new CSV. syncFromDropbox() merges remote state into local before we push.
+                    if (dropboxSyncEnabled) {
+                        await syncFromDropbox().catch(e => console.warn('⚠ Pre-upload sync from Dropbox failed:', e));
+                    }
                     saveToStorage();
                     showMessage('csvMsg', 'success', `✓ Loaded ${csvData.length} entries`);
                     switchView('doc-chase');
