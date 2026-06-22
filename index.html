@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.7 - DocuSign Dropbox scan fix (no path scope) 2026-06-22 -->
+<!-- Adelaide Rally 2026 Dashboard v2.8 - DocuSign scan namespace fix 2026-06-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -952,8 +952,10 @@
                 let cursor = null;
                 let hasMore = true;
 
-                // Search for all AR26 Disclaimers PDFs — no path scope to avoid namespace boundary issues
-                // "AR26 Disclaimers" is specific enough to only return Adelaide Rally disclaimer PDFs
+                // Search for all AR26 Disclaimers PDFs within the Massive Events Corp Folders namespace.
+                // Must use Dropbox-API-Path-Root header (ns:2528498259) — without it, search_v2 only
+                // searches the home namespace and returns 0 results for team folder files.
+                const DROPBOX_ENTRANTS_NS = '2528498259';
                 while (hasMore) {
                     let response;
                     if (!cursor) {
@@ -961,7 +963,8 @@
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + token,
-                                'Content-Type': 'application/json'
+                                'Content-Type': 'application/json',
+                                'Dropbox-API-Path-Root': JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_ENTRANTS_NS})
                             },
                             body: JSON.stringify({
                                 query: 'AR26 Disclaimers',
@@ -976,7 +979,8 @@
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + token,
-                                'Content-Type': 'application/json'
+                                'Content-Type': 'application/json',
+                                'Dropbox-API-Path-Root': JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_ENTRANTS_NS})
                             },
                             body: JSON.stringify({ cursor })
                         });
