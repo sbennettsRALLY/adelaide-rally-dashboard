@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.4 - Dropbox CORS download fix applied 2026-06-18 -->
+<!-- Adelaide Rally 2026 Dashboard v2.5 - Additional items fix + sync error hardening 2026-06-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1367,7 +1367,7 @@
             {item: 'Driver Swap', price: 86.36, header: 'Shared Drive (Driver & Navigator Swap)', trigger: 'yes'},
             {item: 'T-Shirt', price: 59.09, header: 'I would like to purchase a 2026 Adelaide Rally additional items-2026 Adelaide Rally Long Sleeve T', trigger: 'yes'},
             {item: 'Phone Cradle', price: 42.73, header: 'I would like to purchase a 2026 Adelaide Rally additional items-Adelaide Rally Phone Cradle', trigger: 'yes'},
-            {item: 'Phone Charger', price: 26.36, header: 'I would like to purchase a 2026 Adelaide Rally additional items-Adelaide Rally Phone Power Bank (USB C & Micro USB)', trigger: 'yes'},
+            {item: 'Phone Charger', price: 26.36, header: 'I would like to purchase a 2026 Adelaide Rally additional items-Adelaide Rally Phone Power Bank (USB  & Micro USB)', trigger: 'yes'},
             {item: 'Media Pack', price: 268.18, header: 'I would like to purchase a media pack', trigger: 'Photo Pack inc. 10 x photos'}
         ];
 
@@ -1428,10 +1428,28 @@
             itemsBody.innerHTML = '';
 
             additionalItemsConfig.forEach(config => {
-                const headerIdx = csvHeaders.findIndex(h => h === config.header);
+                // Case-insensitive, whitespace-trimmed header match
+                const headerIdx = csvHeaders.findIndex(h => h.trim().toLowerCase() === config.header.trim().toLowerCase());
                 let qty = 0;
                 if (headerIdx >= 0) {
-                    qty = csvData.filter(row => (row[headerIdx] || '').toLowerCase() === config.trigger.toLowerCase()).length;
+                    if (config.trigger.toLowerCase() === 'yes') {
+                        // Accept 'yes' (any case) OR a positive numeric quantity (e.g. '1', '2')
+                        qty = csvData.filter(row => {
+                            const val = (row[headerIdx] || '').trim().toLowerCase();
+                            if (val === 'yes') return true;
+                            const num = parseFloat(val);
+                            return !isNaN(num) && num > 0;
+                        }).length;
+                    } else {
+                        qty = csvData.filter(row => (row[headerIdx] || '').trim().toLowerCase() === config.trigger.trim().toLowerCase()).length;
+                    }
+                    console.log(`✓ ${config.item}: header found (col ${headerIdx}), qty=${qty}`);
+                } else {
+                    console.warn(`⚠ ${config.item}: header NOT matched — expected: "${config.header}"`);
+                    // Log any similar headers to help diagnose the mismatch
+                    const keyword = config.header.toLowerCase().split('-').pop().trim().slice(0, 20);
+                    const similar = csvHeaders.filter(h => h.toLowerCase().includes(keyword));
+                    if (similar.length > 0) console.warn(`   Possible match:`, similar);
                 }
                 const sales = qty * config.price;
                 totalQty += qty;
@@ -3068,7 +3086,8 @@
                     }
                 }
                 const linkData = await linkResponse.json();
-                const response = await fetch(linkData.link);
+                // Fetch from the CDN link with explicit CORS mode and no credentials
+                const response = await fetch(linkData.link, { mode: 'cors', credentials: 'omit' });
                 if (response.ok) {
                     const text = await response.text();
                     const remoteState = JSON.parse(text);
@@ -3183,26 +3202,13 @@
                         lastSyncTimestamp = Date.now();
                         updateDropboxStatus();
                     }
-                } else if (response.status === 401) {
-                    console.warn('⚠ Token expired, attempting refresh...');
-                    const refreshed = await refreshDropboxToken();
-                    if (refreshed) {
-                        // Retry the sync with new token
-                        await syncFromDropbox();
-                    } else {
-                        updateDropboxStatus('Session expired — reconnect');
-                    }
-                } else if (response.status === 409) {
-                    // File doesn't exist yet, that's OK
-                    console.log('ℹ Dropbox state file not found (first sync)');
                 } else {
-                    const errorText = await response.text();
-                    console.warn('⚠ Failed to sync from Dropbox:', response.status, errorText);
-                    updateDropboxStatus('Sync failed (' + response.status + ')');
+                    // CDN link returned non-ok — log but don't disable sync; uploads still work
+                    console.warn('⚠ Dropbox CDN download returned:', response.status);
                 }
             } catch (error) {
+                // Transient errors (CORS, network) — don't disable sync; uploads can still succeed
                 console.warn('⚠ Error syncing from Dropbox:', error.message);
-                // Don't disable sync on transient errors — uploads can still succeed
             }
         }
         async function loadFromDropbox() {
