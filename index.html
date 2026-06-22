@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.6 - DocuSign check via Dropbox PDF scan 2026-06-22 -->
+<!-- Adelaide Rally 2026 Dashboard v2.7 - DocuSign Dropbox scan fix (no path scope) 2026-06-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -952,7 +952,8 @@
                 let cursor = null;
                 let hasMore = true;
 
-                // Search for all AR26 Disclaimers PDFs — paginate through all results
+                // Search for all AR26 Disclaimers PDFs — no path scope to avoid namespace boundary issues
+                // "AR26 Disclaimers" is specific enough to only return Adelaide Rally disclaimer PDFs
                 while (hasMore) {
                     let response;
                     if (!cursor) {
@@ -965,9 +966,7 @@
                             body: JSON.stringify({
                                 query: 'AR26 Disclaimers',
                                 options: {
-                                    path: ENTRANTS_PATH,
                                     filename_only: true,
-                                    file_extensions: ['pdf'],
                                     max_results: 100
                                 }
                             })
@@ -984,24 +983,25 @@
                     }
 
                     if (!response.ok) {
-                        throw new Error(`Dropbox search failed: HTTP ${response.status}`);
+                        const errText = await response.text().catch(() => '');
+                        throw new Error(`Dropbox search failed: HTTP ${response.status} — ${errText}`);
                     }
 
                     const data = await response.json();
                     hasMore = data.has_more || false;
                     cursor = data.cursor;
+                    console.log(`  🔍 Search page: ${(data.matches || []).length} results, has_more=${hasMore}`);
 
                     // Parse entry ID from filename: "388 George Pappas AR26 Disclaimers.pdf" → "388"
                     (data.matches || []).forEach(match => {
                         // Handle both Dropbox search_v2 response shapes
-                        const name = (match.metadata && match.metadata.metadata && match.metadata.metadata.name)
-                                  || (match.metadata && match.metadata.name)
-                                  || '';
+                        const meta = (match.metadata && match.metadata.metadata) || match.metadata || {};
+                        const name = meta.name || '';
                         if (name.toLowerCase().includes('ar26 disclaimers') && name.toLowerCase().endsWith('.pdf')) {
                             const entryId = name.split(' ')[0];
                             if (entryId && /^\d+$/.test(entryId)) {
                                 verifiedEntryIds.add(entryId);
-                                console.log(`  📄 Found signed PDF for entry ${entryId}: ${name}`);
+                                console.log(`  📄 Entry ${entryId}: ${name}`);
                             }
                         }
                     });
