@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.5 - Additional items fix + sync error hardening 2026-06-22 -->
+<!-- Adelaide Rally 2026 Dashboard v2.6 - DocuSign check via Dropbox PDF scan 2026-06-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -697,7 +697,7 @@
                 </select>
                 <select id="docFilterCategory" class="fsel" onchange="filterDocuments()">
                 </select>
-                <button class="btn-reset" onclick="syncVerificationFromGoogleSheets()" style="margin-left: auto;">🔄 Docusign Check</button>
+                <button class="btn-reset" onclick="syncVerificationFromDropbox()" style="margin-left: auto;">🔄 DocuSign Check</button>
             </div>
             <div class="stat-row">
                 <div class="stat-chip" id="totalBtn" onclick="showAllEntries()" style="cursor: pointer;">
@@ -930,119 +930,122 @@
                 weeksElement.textContent = Math.max(0, weeksDiff);
             }
         }
-        // Google Apps Script Verification Sync
-        // Reads from Google Apps Script endpoint (no CORS issues, works with file:// URLs)
-        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxO7h-tk0rnLnX4XYiHnvav5QXBLZjcINJPi8Bu_2rWshtVl9gSNfuswvL2FWc_K3eQhQ/exec';
-        function syncVerificationFromGoogleSheets() {
+        // DocuSign Verification via Dropbox PDF Scan (v2.6)
+        // Scans the entrants folder in Dropbox for "AR26 Disclaimers.pdf" files.
+        // Any entry with a PDF in their folder is treated as DocuSign-signed.
+        // This is more reliable than the Google Sheets chain (catches same-day completions immediately).
+        async function syncVerificationFromDropbox() {
+            if (!dropboxSyncEnabled) {
+                showMessage('docMsg', 'error', '❌ Dropbox not connected. Please connect to Dropbox first.');
+                return;
+            }
             try {
-                if (GOOGLE_APPS_SCRIPT_URL === 'PASTE_YOUR_SCRIPT_URL_HERE') {
-                    showMessage('docMsg', 'error', '❌ Google Apps Script URL not configured. See instructions in the code.');
+                showMessage('docMsg', 'info', '🔄 Scanning Dropbox for signed DocuSign PDFs...');
+                const token = await getValidDropboxToken();
+                if (!token) {
+                    showMessage('docMsg', 'error', '❌ No Dropbox token available. Please reconnect.');
                     return;
                 }
-                showMessage('docMsg', 'info', '🔄 Syncing verification from Google Sheets...');
-                // Use XMLHttpRequest for compatibility with file:// URLs
-                const xhr = new XMLHttpRequest();
-                xhr.onload = function() {
-                    if (xhr.status !== 200) {
-                        showMessage('docMsg', 'error', '❌ Failed to reach Google Apps Script (Status: ' + xhr.status + ')');
-                        return;
-                    }
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.error) {
-                            showMessage('docMsg', 'error', '❌ Script error: ' + response.error);
-                            return;
-                        }
-                        if (!response.success || !response.verified) {
-                            showMessage('docMsg', 'error', '❌ Invalid response from Google Apps Script');
-                            return;
-                        }
-                        const verificationMap = response.verified;
-                        console.log('Verification Map:', verificationMap);
-                        const mapKeys = Object.keys(verificationMap);
-                        console.log('Map keys:', mapKeys);
-                        console.log('First map key example:', mapKeys[0] ? `"${mapKeys[0]}"` : 'NO KEYS FOUND');
-                        console.log('Column Indices - Entry:', entryIdIdx, 'First:', firstNameIdx, 'Last:', lastNameIdx);
-                        // Get all verification keys to analyze format
-                        const verificationKeys = Object.keys(verificationMap);
-                        console.log('Total verified entries in sheet:', verificationKeys.length);
-                        console.log('Verification map keys:', verificationKeys);
-                        // Match entries from CSV data to verification map
-                        // The Dropbox Folder name in Google Sheet is constructed as: "Entry ID FirstName LastName"
-                        let verifiedCount = 0;
-                        csvData.forEach((row, idx) => {
-                            const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
-                            const firstName = firstNameIdx >= 0 ? (row[firstNameIdx] || '').trim() : '';
-                            const lastName = lastNameIdx >= 0 ? (row[lastNameIdx] || '').trim() : '';
-                            // Construct the Dropbox Folder name as Zapier does: "Entry ID FirstName LastName"
-                            // Normalize multiple spaces to single spaces
-                            const dropboxFolder = `${entryId} ${firstName} ${lastName}`.trim().replace(/\s+/g, ' ');
-                            if (!entryId || !firstName || !lastName) {
-                                if (idx < 3) {
-                                    console.log(`⚠️ Row ${idx}: Missing data (ID: "${entryId}", First: "${firstName}", Last: "${lastName}")`);
+
+                const ENTRANTS_PATH = '/Massive Events Corp Folders/Adelaide Rally 2026/02. Entrants';
+                const verifiedEntryIds = new Set();
+                let cursor = null;
+                let hasMore = true;
+
+                // Search for all AR26 Disclaimers PDFs — paginate through all results
+                while (hasMore) {
+                    let response;
+                    if (!cursor) {
+                        response = await fetch('https://api.dropboxapi.com/2/files/search_v2', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer ' + token,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                query: 'AR26 Disclaimers',
+                                options: {
+                                    path: ENTRANTS_PATH,
+                                    filename_only: true,
+                                    file_extensions: ['pdf'],
+                                    max_results: 100
                                 }
-                                return;
-                            }
-                            console.log(`Row ${idx}: Looking for Dropbox Folder="${dropboxFolder}"`);
-                            // Look up this Dropbox Folder in the verification map
-                            // Try exact match first
-                            let docusignStatus = verificationMap[dropboxFolder];
-                            // If no exact match, try with normalized spaces in all keys
-                            if (!docusignStatus) {
-                                for (let key of verificationKeys) {
-                                    const normalizedKey = key.trim().replace(/\s+/g, ' ');
-                                    if (normalizedKey === dropboxFolder) {
-                                        docusignStatus = verificationMap[key];
-                                        console.log(`  ℹ️ Matched with space normalization: "${key}" → "${normalizedKey}"`);
-                                        break;
-                                    }
-                                }
-                            }
-                            if (docusignStatus) {
-                                console.log(`✓ Found in Google Sheet: "${dropboxFolder}" → DocuSign status: ${docusignStatus}`);
-                                // Check if DocuSign status indicates verification (true, 'true', 'TRUE', or 'Yes')
-                                if (docusignStatus === true || docusignStatus === 'true' || docusignStatus === 'TRUE' || docusignStatus === 'Yes') {
-                                    // Only check if not already locked from a previous sync
-                                    if (!disclaimerLocked[entryId]) {
-                                        console.log(`  ✓ DocuSign verified! Setting disclaimer checkbox for entry ${entryId} and LOCKING it`);
-                                        disclaimerChecked[entryId] = true;
-                                        disclaimerLocked[entryId] = true;  // Lock it so users can't uncheck it
-                                        verifiedCount++;
-                                    } else {
-                                        console.log(`  ℹ️ Entry ${entryId} already locked from previous verification`);
-                                    }
-                                } else {
-                                    console.log(`  ⚠️ DocuSign not verified. Status: ${docusignStatus}`);
-                                }
-                            } else {
-                                if (idx < 3) {
-                                    console.log(`⚠️ Dropbox Folder not found in Google Sheet: "${dropboxFolder}"`);
-                                    console.log(`   Available keys in map:`, verificationKeys.slice(0, 5));
-                                }
-                            }
+                            })
                         });
-                        // Update localStorage
-                        saveToStorage();
-                        // Re-render the document table
-                        renderDocTable();
-                        updateDocStats();
-                        // Feedback
-                        const timestamp = new Date().toLocaleString();
-                        showMessage('docMsg', 'success', `✓ Sync complete: ${verifiedCount} entries verified via Google Sheets (${timestamp})`);
-                    } catch (parseError) {
-                        console.error('Parse error:', parseError);
-                        showMessage('docMsg', 'error', `❌ Error parsing response: ${parseError.message}`);
+                    } else {
+                        response = await fetch('https://api.dropboxapi.com/2/files/search/continue_v2', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': 'Bearer ' + token,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ cursor })
+                        });
                     }
-                };
-                xhr.onerror = function() {
-                    showMessage('docMsg', 'error', '❌ Network error - Unable to reach Google Apps Script');
-                };
-                xhr.open('GET', GOOGLE_APPS_SCRIPT_URL, true);
-                xhr.send();
+
+                    if (!response.ok) {
+                        throw new Error(`Dropbox search failed: HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    hasMore = data.has_more || false;
+                    cursor = data.cursor;
+
+                    // Parse entry ID from filename: "388 George Pappas AR26 Disclaimers.pdf" → "388"
+                    (data.matches || []).forEach(match => {
+                        // Handle both Dropbox search_v2 response shapes
+                        const name = (match.metadata && match.metadata.metadata && match.metadata.metadata.name)
+                                  || (match.metadata && match.metadata.name)
+                                  || '';
+                        if (name.toLowerCase().includes('ar26 disclaimers') && name.toLowerCase().endsWith('.pdf')) {
+                            const entryId = name.split(' ')[0];
+                            if (entryId && /^\d+$/.test(entryId)) {
+                                verifiedEntryIds.add(entryId);
+                                console.log(`  📄 Found signed PDF for entry ${entryId}: ${name}`);
+                            }
+                        }
+                    });
+                }
+
+                console.log(`✓ Dropbox scan complete: ${verifiedEntryIds.size} signed entries found:`, [...verifiedEntryIds].sort((a,b)=>a-b));
+
+                // Match against CSV and lock verified entries
+                let newlyVerified = 0;
+                let alreadyVerified = 0;
+
+                csvData.forEach(row => {
+                    const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                    if (!entryId || !verifiedEntryIds.has(entryId)) return;
+
+                    if (!disclaimerLocked[entryId]) {
+                        disclaimerChecked[entryId] = true;
+                        disclaimerLocked[entryId] = true;
+                        newlyVerified++;
+                        console.log(`  ✓ Entry ${entryId} marked as DocuSign verified`);
+                    } else {
+                        alreadyVerified++;
+                    }
+                });
+
+                saveToStorage();
+                renderDocTable();
+                updateDocStats();
+
+                const timestamp = new Date().toLocaleString();
+                const totalVerified = newlyVerified + alreadyVerified;
+                showMessage('docMsg', 'success',
+                    `✓ Dropbox scan: ${totalVerified} signed (${newlyVerified} newly verified, ${alreadyVerified} already locked) — ${timestamp}`
+                );
+
             } catch (error) {
-                console.error('Google Apps Script sync error:', error);
-                showMessage('docMsg', 'error', `❌ Sync failed: ${error.message}`);
+                console.error('Dropbox DocuSign scan error:', error);
+                showMessage('docMsg', 'error', `❌ Scan failed: ${error.message}`);
             }
+        }
+        // Legacy Google Sheets verification (kept for reference — replaced by syncVerificationFromDropbox)
+        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxO7h-tk0rnLnX4XYiHnvav5QXBLZjcINJPi8Bu_2rWshtVl9gSNfuswvL2FWc_K3eQhQ/exec';
+        function syncVerificationFromGoogleSheets() {
+            showMessage('docMsg', 'info', 'ℹ️ Google Sheets check replaced by Dropbox scan. Click "🔄 DocuSign Check" instead.');
         }
         // Keep old function for manual verification
         async function verifyEntriesWithDropbox(mode = 'manual-check') {
