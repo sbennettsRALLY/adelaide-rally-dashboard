@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.0 - Car Numbers page added 2026-07-03 -->
+<!-- Adelaide Rally 2026 Dashboard v3.0b - Car Numbers table columns updated 2026-07-03 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -961,11 +961,9 @@
                 <table id="cnTable">
                     <thead>
                         <tr>
-                            <th style="width:50px;">#</th>
+                            <th style="width:90px;">Entry ID</th>
                             <th style="width:90px;">Car #</th>
                             <th>Category</th>
-                            <th style="width:110px;">Role</th>
-                            <th style="width:90px;">Entry ID</th>
                             <th>Driver Name</th>
                             <th style="width:110px; text-align:center;">Action</th>
                         </tr>
@@ -4828,17 +4826,19 @@
                     if (carNumberAssignments[s.carNum]) assignedSlots++;
                 }
             });
-            const tlCount = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Leader' && carNumberAssignments[s.carNum]).length;
-            const tfCount = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Follower' && carNumberAssignments[s.carNum]).length;
+            const tlTotal      = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Leader').length;
+            const tfTotal      = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Follower').length;
+            const tlUnassigned = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Leader'   && !carNumberAssignments[s.carNum]).length;
+            const tfUnassigned = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Follower' && !carNumberAssignments[s.carNum]).length;
 
             const statsBar = document.getElementById('cnStatsBar');
             if (statsBar) {
                 statsBar.innerHTML = `
-                    <div class="cn-stat"><div class="cn-stat-num">${assignedSlots}</div><div class="cn-stat-lbl">Assigned</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots - assignedSlots}</div><div class="cn-stat-lbl">Unassigned</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots}</div><div class="cn-stat-lbl">Total Slots</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${tlCount}</div><div class="cn-stat-lbl">TL Assigned</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${tfCount}</div><div class="cn-stat-lbl">TF Assigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${assignedSlots}</div><div class="cn-stat-lbl">Entrants Assigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots - assignedSlots}</div><div class="cn-stat-lbl">Entrants Unassigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots}</div><div class="cn-stat-lbl">Total Entrant Slots</div></div>
+                    <div class="cn-stat" style="border-top-color:#1B3A6B;"><div class="cn-stat-num" style="color:#1B3A6B;">${tlUnassigned}</div><div class="cn-stat-lbl">TL Unassigned</div></div>
+                    <div class="cn-stat" style="border-top-color:#3A3A3A;"><div class="cn-stat-num" style="color:#3A3A3A;">${tfUnassigned}</div><div class="cn-stat-lbl">TF Unassigned</div></div>
                 `;
             }
 
@@ -4884,11 +4884,6 @@
                 }
 
                 // Role badge
-                let roleBadge = '';
-                if      (slot.role === 'Tour Leader')   roleBadge = `<span class="cn-badge-tl">TL</span>`;
-                else if (slot.role === 'Tour Follower') roleBadge = `<span class="cn-badge-tf">TF</span>`;
-                else                                    roleBadge = `<span class="cn-badge-ent">Entrant</span>`;
-
                 // Swap button
                 let btnClass, btnLabel;
                 if (isSource) {
@@ -4903,11 +4898,9 @@
                 const driverDisplay  = asg ? asg.driverName : `<span class="cn-unassigned">— unassigned —</span>`;
 
                 tr.innerHTML = `
-                    <td style="text-align:center; color:#888;">${idx + 1}</td>
+                    <td>${entryIdDisplay}</td>
                     <td><span class="cn-carnum">${slot.carNum}</span></td>
                     <td>${slot.category}</td>
-                    <td>${roleBadge}</td>
-                    <td>${entryIdDisplay}</td>
                     <td>${driverDisplay}</td>
                     <td style="text-align:center;">
                         <button class="cn-swap-btn ${btnClass}" onclick="cnSelectSlot('${slot.carNum}')">${btnLabel}</button>
