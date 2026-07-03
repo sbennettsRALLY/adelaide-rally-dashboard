@@ -1527,10 +1527,9 @@
             {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes-Benz'},
             {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes AMG'},
             {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes-Benz Branded Tour', trigger1: 'Mercedes-Benz'},
-            {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes-Benz Branded Tour', trigger1: 'Mercedes AMG'},
             {category: 'Honda', capacity: 17, header1: 'I am entering the Honda Branded Tour', trigger1: 'Honda'},
             {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Peter Page Hyundai'},
-            {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Hyundai'},
+            {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Hyundai Branded Tour', trigger1: 'Hyundai'},
             {category: 'Porsche Centre', capacity: 17, header1: 'I am entering the Porsche Centre Adelaide Branded Tour (Driver)', trigger1: 'Porsche Centre Adelaide'},
             {category: 'Porsche Club', capacity: 34, header1: 'I am entering the Porsche Club Branded Tour', trigger1: 'Porsche Club'},
             {category: 'Ferrari Club', capacity: 17, header1: 'I am entering the Ferrari Club Branded Tour', trigger1: 'Ferrari Club'},
@@ -1579,26 +1578,46 @@
         function updateDashboardTables() {
             if (csvData.length === 0) return;
 
-            // Derive entry type column index locally so it works on page load from stored state
-            // (the global entryTypeIdx is only set during a fresh CSV upload)
             const localEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
 
-            // Update driver entries
+            // All "I am entering" column indices — same flexible lookup that getCategory() uses
+            const catColIdxs = csvHeaders
+                .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
+                .filter(i => i >= 0);
+
+            // Build trigger-value → config-category map from all driverEntryConfig entries
+            const triggerToCat = {};
+            driverEntryConfig.forEach(cfg => {
+                if (!triggerToCat[cfg.trigger1]) triggerToCat[cfg.trigger1] = cfg.category;
+            });
+
+            // Count drivers per category using getCategory() — works regardless of header names
+            const categoryCounts = {};
+            csvData.forEach(row => {
+                if (localEntryTypeIdx >= 0 && (row[localEntryTypeIdx] || '').trim() !== 'Driver') return;
+                const rawVal = getCategory(row, catColIdxs);
+                if (!rawVal) return;
+                // Map raw value to config category (exact match first, then startsWith fallback)
+                let mappedCat = triggerToCat[rawVal];
+                if (!mappedCat) {
+                    const key = Object.keys(triggerToCat).find(t => rawVal.startsWith(t));
+                    mappedCat = key ? triggerToCat[key] : rawVal;
+                }
+                categoryCounts[mappedCat] = (categoryCounts[mappedCat] || 0) + 1;
+            });
+
+            // Update driver entries — one row per unique category (skip duplicate config entries)
             let totalEntries = 0;
             let totalCapacity = 0;
             const driverBody = document.getElementById('driverEntriesBody');
             driverBody.innerHTML = '';
+            const seenCategories = new Set();
 
             driverEntryConfig.forEach(config => {
-                const headerIdx = csvHeaders.findIndex(h => h === config.header1);
-                let entries = 0;
-                if (headerIdx >= 0) {
-                    // Only count rows where Main Entry Type = 'Driver' (not Navigators)
-                    entries = csvData.filter(row =>
-                        row[headerIdx] === config.trigger1 &&
-                        (localEntryTypeIdx >= 0 ? (row[localEntryTypeIdx] || '').trim() === 'Driver' : true)
-                    ).length;
-                }
+                if (seenCategories.has(config.category)) return; // skip duplicate entries
+                seenCategories.add(config.category);
+
+                const entries = categoryCounts[config.category] || 0;
                 totalEntries += entries;
                 totalCapacity += config.capacity;
 
