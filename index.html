@@ -948,28 +948,55 @@
                 <button class="btn-reset" style="background:#16A34A;" onclick="cnToggleInsert()" id="cnInsertBtn" title="Manually insert a car number assignment">➕ Insert</button>
             </div>
 
-            <!-- Manual insert panel -->
+            <!-- Add new car number slot panel -->
             <div id="cnInsertPanel" style="display:none; background:#F0FDF4; border:1px solid #86EFAC; border-radius:8px; padding:14px 18px; margin-bottom:14px;">
-                <div style="font-size:12px; font-weight:700; color:#15803D; margin-bottom:10px;">➕ Manually Insert Car Number</div>
+                <div style="font-size:12px; font-weight:700; color:#15803D; margin-bottom:10px;">➕ Add New Car Number Slot</div>
                 <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;">
                     <div>
                         <div style="font-size:10px; color:#555; margin-bottom:3px;">Car Number</div>
-                        <select id="cnInsertCarNum" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; min-width:140px;">
-                            <option value="">— select slot —</option>
+                        <input type="text" id="cnInsertCarNum" placeholder="e.g. 46A" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; width:80px;">
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Category</div>
+                        <select id="cnInsertCategory" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; min-width:160px;">
+                            <option value="">— select —</option>
+                            <option value="Prima Tour">Prima Tour</option>
+                            <option value="Zagame">Zagame</option>
+                            <option value="Glenelg BMW">Glenelg BMW</option>
+                            <option value="Solitaire">Solitaire</option>
+                            <option value="Adelaide BMW">Adelaide BMW</option>
+                            <option value="Mercedes-Benz">Mercedes-Benz</option>
+                            <option value="Honda">Honda</option>
+                            <option value="Peter Page Hyundai">Peter Page Hyundai</option>
+                            <option value="Porsche Centre Adelaide">Porsche Centre Adelaide</option>
+                            <option value="Porsche Club">Porsche Club</option>
+                            <option value="Ferrari Club">Ferrari Club</option>
+                            <option value="Main Tour">Main Tour</option>
+                            <option value="Spirit Tour">Spirit Tour</option>
+                            <option value="TSD">TSD</option>
+                            <option value="Challenge 120">Challenge 120</option>
+                            <option value="Challenge 130">Challenge 130</option>
+                            <option value="Competition/Rally Pro">Competition/Rally Pro</option>
                         </select>
                     </div>
                     <div>
-                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Entry ID</div>
-                        <input type="text" id="cnInsertEntryId" placeholder="e.g. 388" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; width:90px;">
+                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Role</div>
+                        <select id="cnInsertRole" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px;">
+                            <option value="Entrant">Entrant</option>
+                            <option value="Tour Leader">Tour Leader</option>
+                            <option value="Tour Follower">Tour Follower</option>
+                        </select>
                     </div>
                     <div>
-                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Name</div>
-                        <input type="text" id="cnInsertName" placeholder="First Last" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; width:180px;">
+                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Insert After</div>
+                        <select id="cnInsertAfter" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; min-width:180px;">
+                            <option value="">— at end of list —</option>
+                        </select>
                     </div>
-                    <button class="btn-reset" style="background:#16A34A; padding:6px 16px;" onclick="cnInsertManual()">✓ Insert</button>
+                    <button class="btn-reset" style="background:#16A34A; padding:6px 16px;" onclick="cnAddCustomSlot()">✓ Add Slot</button>
                     <button class="btn-reset" style="background:#6B7280; padding:6px 12px;" onclick="cnToggleInsert()">Cancel</button>
                 </div>
-                <div id="cnInsertMsg" style="margin-top:8px; font-size:11px; color:#DC2626; display:none;"></div>
+                <div id="cnInsertMsg" style="margin-top:8px; font-size:11px; display:none;"></div>
             </div>
 
             <!-- Stats bar -->
@@ -1042,6 +1069,7 @@
         let withdrawn = new Set(); // Track withdrawn entrant indices
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
+        let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
         let currentView = 'dashboard';
@@ -1496,8 +1524,10 @@
             {category: 'Solitaire', capacity: 34, header1: 'I am entering the Solitaire Branded Tour', trigger1: 'Solitaire'},
             {category: 'Glenelg BMW', capacity: 17, header1: 'I am entering the Glenelg BMW Branded Tour', trigger1: 'Glenelg BMW'},
             {category: 'BMW MINI', capacity: 26, header1: 'I am entering the Adelaide BMW Branded Tour', trigger1: 'Adelaide BMW'},
-            {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes-Benz'},
-            {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes AMG'},
+            {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes-Benz'},
+            {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes AMG'},
+            {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes-Benz Branded Tour', trigger1: 'Mercedes-Benz'},
+            {category: 'Mercedes-Benz', capacity: 24, header1: 'I am entering the Mercedes-Benz Branded Tour', trigger1: 'Mercedes AMG'},
             {category: 'Honda', capacity: 17, header1: 'I am entering the Honda Branded Tour', trigger1: 'Honda'},
             {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Peter Page Hyundai'},
             {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Hyundai'},
@@ -1530,7 +1560,7 @@
             {category: 'Solitaire', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Glenelg BMW', entryFee: 2177.27, isBrandedTour: true},
             {category: 'BMW MINI', entryFee: 2177.27, isBrandedTour: true},
-            {category: 'Mercedes', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Mercedes-Benz', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Honda', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Peter Page Hyundai', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Porsche Centre', entryFee: 2177.27, isBrandedTour: true},
@@ -2899,6 +2929,7 @@
                 disclaimerLocked,
                 withdrawn: Array.from(withdrawn),
                 carNumberAssignments,
+                customCarSlots,
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
@@ -2920,6 +2951,7 @@
                     disclaimerLocked = data.disclaimerLocked || {};
                     withdrawn = new Set(data.withdrawn || []);
                     carNumberAssignments = data.carNumberAssignments || {};
+                    customCarSlots = data.customCarSlots || [];
                     // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
                     lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
@@ -4725,6 +4757,29 @@
             {carNum:'724',category:'Competition/Rally Pro',role:'Entrant'},
         ];
 
+        // Returns CAR_NUMBER_SLOTS merged with any user-added custom slots
+        function getEffectiveSlots() {
+            if (!customCarSlots || customCarSlots.length === 0) return CAR_NUMBER_SLOTS;
+            const insertMap = {};
+            const appendList = [];
+            customCarSlots.forEach(cs => {
+                const entry = {carNum: cs.carNum, category: cs.category, role: cs.role, custom: true};
+                if (cs.insertAfter) {
+                    if (!insertMap[cs.insertAfter]) insertMap[cs.insertAfter] = [];
+                    insertMap[cs.insertAfter].push(entry);
+                } else {
+                    appendList.push(entry);
+                }
+            });
+            const result = [];
+            CAR_NUMBER_SLOTS.forEach(slot => {
+                result.push(slot);
+                if (insertMap[slot.carNum]) insertMap[slot.carNum].forEach(e => result.push(e));
+            });
+            appendList.forEach(e => result.push(e));
+            return result;
+        }
+
         // Maps driverEntryConfig.category → CAR_NUMBER_SLOTS category
         const CN_CATEGORY_MAP = {
             'Prima Tour':           'Prima Tour',
@@ -4807,7 +4862,7 @@
             // Iterate slots in run order, fill empty Entrant slots only
             const cursors = {};
             let newCount = 0;
-            CAR_NUMBER_SLOTS.forEach(slot => {
+            getEffectiveSlots().forEach(slot => {
                 if (slot.role !== 'Entrant') return;          // skip TL/TF
                 if (carNumberAssignments[slot.carNum]) return; // already filled
 
@@ -4879,64 +4934,61 @@
             panel.style.display = showing ? 'none' : '';
             btn.textContent = showing ? '➕ Insert' : '✕ Close Insert';
             if (!showing) {
-                // Populate the car number select with all unassigned slots
-                const sel = document.getElementById('cnInsertCarNum');
-                if (sel) {
-                    sel.innerHTML = '<option value="">— select slot —</option>';
-                    CAR_NUMBER_SLOTS.forEach(slot => {
-                        const asg = carNumberAssignments[slot.carNum];
-                        const isUsed = asg && !cnWithdrawnEntryIds.has(asg.entryId);
-                        const opt = document.createElement('option');
-                        opt.value = slot.carNum;
-                        const roleTag = slot.role === 'Tour Leader' ? ' [TL]' : slot.role === 'Tour Follower' ? ' [TF]' : '';
-                        opt.textContent = '#' + slot.carNum + ' ' + slot.category + roleTag + (isUsed ? ' ✓' : '');
-                        if (isUsed) opt.style.color = '#9CA3AF';
-                        sel.appendChild(opt);
-                    });
-                }
+                populateInsertAfterDropdown();
                 document.getElementById('cnInsertMsg').style.display = 'none';
+                document.getElementById('cnInsertCarNum').value = '';
             }
         }
 
-        function cnInsertManual() {
-            const carNum  = (document.getElementById('cnInsertCarNum').value || '').trim();
-            const entryId = (document.getElementById('cnInsertEntryId').value || '').trim();
-            const name    = (document.getElementById('cnInsertName').value || '').trim();
-            const msgEl   = document.getElementById('cnInsertMsg');
+        function populateInsertAfterDropdown() {
+            const sel = document.getElementById('cnInsertAfter');
+            if (!sel) return;
+            const current = sel.value;
+            sel.innerHTML = '<option value="">— at end of list —</option>';
+            getEffectiveSlots().forEach(slot => {
+                const opt = document.createElement('option');
+                opt.value = slot.carNum;
+                const roleTag = slot.role === 'Tour Leader' ? ' [TL]' : slot.role === 'Tour Follower' ? ' [TF]' : '';
+                opt.textContent = '#' + slot.carNum + ' — ' + slot.category + roleTag;
+                sel.appendChild(opt);
+            });
+            sel.value = current; // restore selection if still valid
+        }
 
-            const showErr = (msg) => { msgEl.textContent = msg; msgEl.style.display = ''; msgEl.style.color = '#DC2626'; };
-            const showOk  = (msg) => { msgEl.textContent = msg; msgEl.style.display = ''; msgEl.style.color = '#15803D'; };
+        function cnAddCustomSlot() {
+            const carNum      = (document.getElementById('cnInsertCarNum').value || '').trim();
+            const category    = (document.getElementById('cnInsertCategory').value || '').trim();
+            const role        = (document.getElementById('cnInsertRole').value || '').trim();
+            const insertAfter = (document.getElementById('cnInsertAfter').value || '').trim();
+            const msgEl       = document.getElementById('cnInsertMsg');
 
-            if (!carNum) { showErr('❌ Please select a car number slot.'); return; }
-            if (!name)   { showErr('❌ Please enter a name.'); return; }
+            const showErr = msg => { msgEl.textContent = msg; msgEl.style.display = ''; msgEl.style.color = '#DC2626'; };
 
-            // Check duplicate car number (slot already has a non-withdrawn assignment)
-            const existing = carNumberAssignments[carNum];
-            if (existing && !cnWithdrawnEntryIds.has(existing.entryId)) {
-                showErr(`❌ Car #${carNum} is already assigned to ${existing.driverName}. Use the Swap button to change it.`);
+            if (!carNum)   { showErr('❌ Please enter a car number.'); return; }
+            if (!category) { showErr('❌ Please select a category.'); return; }
+
+            // Check for duplicate across all slots (base + custom)
+            if (getEffectiveSlots().find(s => s.carNum === carNum)) {
+                showErr(`❌ Car number "${carNum}" already exists — duplicates are not allowed.`);
                 return;
             }
 
-            // Check duplicate entry ID (same person already has a different car number)
-            if (entryId) {
-                const conflict = Object.entries(carNumberAssignments).find(([cn, a]) =>
-                    a && a.entryId === entryId && !cnWithdrawnEntryIds.has(a.entryId) && cn !== carNum
-                );
-                if (conflict) {
-                    showErr(`❌ Entry ID ${entryId} is already assigned to car #${conflict[0]}.`);
-                    return;
-                }
-            }
-
-            carNumberAssignments[carNum] = {entryId: entryId || ('manual-' + carNum), driverName: name};
+            customCarSlots.push({carNum, category, role, insertAfter: insertAfter || null});
             saveToStorage();
             renderCarNumbers();
-            showOk(`✓ Car #${carNum} assigned to ${name}`);
-            document.getElementById('cnInsertEntryId').value = '';
-            document.getElementById('cnInsertName').value = '';
+
             document.getElementById('cnInsertCarNum').value = '';
-            // Refresh the slot dropdown to reflect new state
-            cnToggleInsert(); cnToggleInsert();
+            msgEl.textContent = `✓ Car #${carNum} added (${role}, ${category})${insertAfter ? ' after #' + insertAfter : ' at end'}`;
+            msgEl.style.color = '#15803D';
+            msgEl.style.display = '';
+            populateInsertAfterDropdown();
+        }
+
+        function cnRemoveCustomSlot(carNum) {
+            customCarSlots = customCarSlots.filter(cs => cs.carNum !== carNum);
+            delete carNumberAssignments[carNum];
+            saveToStorage();
+            renderCarNumbers();
         }
 
         function cnAssignFromReconcile(entryId, driverName, selectElemId) {
@@ -4981,18 +5033,19 @@
             }
             cnWithdrawnEntryIds = withdrawnEntryIds; // sync global
 
-            // Stats — count across ALL 508 car number slots
-            let totalAll = CAR_NUMBER_SLOTS.length;
+            // Stats — count across all car number slots (base + custom)
+            const effectiveSlots = getEffectiveSlots();
+            let totalAll = effectiveSlots.length;
             let assignedAll = 0;
-            CAR_NUMBER_SLOTS.forEach(s => {
+            effectiveSlots.forEach(s => {
                 const asg = carNumberAssignments[s.carNum];
                 if (asg && !withdrawnEntryIds.has(asg.entryId)) assignedAll++;
             });
-            const tlUnassigned = CAR_NUMBER_SLOTS.filter(s => {
+            const tlUnassigned = effectiveSlots.filter(s => {
                 const asg = carNumberAssignments[s.carNum];
                 return s.role === 'Tour Leader' && (!asg || withdrawnEntryIds.has(asg.entryId));
             }).length;
-            const tfUnassigned = CAR_NUMBER_SLOTS.filter(s => {
+            const tfUnassigned = effectiveSlots.filter(s => {
                 const asg = carNumberAssignments[s.carNum];
                 return s.role === 'Tour Follower' && (!asg || withdrawnEntryIds.has(asg.entryId));
             }).length;
@@ -5093,10 +5146,10 @@
                             // Group available slots: own category first, then TL/TF, then others
                             const ownCatMapped = CN_CATEGORY_MAP[d.category] || '';
                             const ownSlots = [], tlTfSlots = [], otherSlots = [];
-                            CAR_NUMBER_SLOTS.forEach(slot => {
+                            getEffectiveSlots().forEach(slot => {
                                 if (usedSlots.has(slot.carNum)) return;
                                 if (ownCatMapped && slot.category === ownCatMapped) ownSlots.push(slot);
-                                else if (slot.role === 'TL' || slot.role === 'TF') tlTfSlots.push(slot);
+                                else if (slot.role === 'Tour Leader' || slot.role === 'Tour Follower') tlTfSlots.push(slot);
                                 else otherSlots.push(slot);
                             });
 
@@ -5150,7 +5203,7 @@
             let entrantCounterByCat = {};
             let visibleCount = 0;
 
-            CAR_NUMBER_SLOTS.forEach((slot, idx) => {
+            effectiveSlots.forEach((slot, idx) => {
                 const asgRaw = carNumberAssignments[slot.carNum] || null;
                 // Treat withdrawn entrants as unassigned in the display
                 const isWithdrawn = asgRaw && withdrawnEntryIds.has(asgRaw.entryId);
@@ -5207,13 +5260,16 @@
                         ? `<span class="cn-unassigned" title="Withdrawn: ${asgRaw.driverName}">— withdrawn —</span>`
                         : `<span class="cn-unassigned">— unassigned —</span>`);
 
+                const removeBtn = slot.custom
+                    ? `<button title="Remove this custom slot" onclick="if(confirm('Remove car #${slot.carNum}?')) cnRemoveCustomSlot('${slot.carNum}')" style="margin-left:5px; font-size:9px; padding:2px 6px; background:#EF4444; color:#fff; border:none; border-radius:3px; cursor:pointer;">🗑</button>`
+                    : '';
                 tr.innerHTML = `
                     <td>${entryIdDisplay}</td>
-                    <td><span class="cn-carnum">${slot.carNum}</span></td>
+                    <td><span class="cn-carnum">${slot.carNum}</span>${slot.custom ? ' <span style="font-size:9px;background:#FDE68A;color:#92400E;padding:1px 4px;border-radius:3px;">custom</span>' : ''}</td>
                     <td>${slot.category}</td>
                     <td>${driverDisplay}</td>
-                    <td style="text-align:center;">
-                        <button class="cn-swap-btn ${btnClass}" onclick="cnSelectSlot('${slot.carNum}')">${btnLabel}</button>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button class="cn-swap-btn ${btnClass}" onclick="cnSelectSlot('${slot.carNum}')">${btnLabel}</button>${removeBtn}
                     </td>`;
 
                 tbody.appendChild(tr);
