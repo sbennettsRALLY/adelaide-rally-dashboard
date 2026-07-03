@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.9 - Driver-only filter for entry counts 2026-07-03 -->
+<!-- Adelaide Rally 2026 Dashboard v3.0 - Car Numbers page added 2026-07-03 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -499,6 +499,29 @@
             border-top: 1px solid var(--border);
             margin-top: 20px;
         }
+        /* ── Car Numbers Page ─────────────────────────────────────────────── */
+        .cn-row-tl td { background: #1B3A6B !important; color: #fff !important; font-weight: 700; }
+        .cn-row-tf td { background: #3A3A3A !important; color: #fff !important; font-weight: 700; }
+        .cn-row-entrant td { background: #fff; }
+        .cn-row-entrant.cn-alt td { background: #F5F8FF; }
+        .cn-row-selected td { background: #FFF3CD !important; color: #333 !important; outline: 2px solid #D4A843; }
+        .cn-row-swap-target td { background: #E8F5E9 !important; cursor: pointer; }
+        .cn-badge-tl { display: inline-block; background: #1B3A6B; color: #fff; border-radius: 4px; padding: 2px 7px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; }
+        .cn-badge-tf { display: inline-block; background: #3A3A3A; color: #fff; border-radius: 4px; padding: 2px 7px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; }
+        .cn-badge-ent { display: inline-block; background: #E8ECF4; color: #1A1E22; border-radius: 4px; padding: 2px 7px; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; }
+        .cn-unassigned { color: #bbb; font-style: italic; }
+        .cn-swap-btn { padding: 4px 10px; border: none; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .cn-swap-btn.idle   { background: var(--navy); color: #fff; }
+        .cn-swap-btn.source { background: #D4A843; color: #000; }
+        .cn-swap-btn.target { background: #22C55E; color: #fff; }
+        .cn-swap-btn.clear  { background: #dc2626; color: #fff; }
+        .cn-stats-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        .cn-stat { background: #fff; border-radius: 8px; padding: 10px 16px; text-align: center; min-width: 100px; box-shadow: 0 2px 8px rgba(31,45,90,0.08); border-top: 3px solid var(--navy); }
+        .cn-stat .cn-stat-num { font-size: 22px; font-weight: 900; color: var(--navy); }
+        .cn-stat .cn-stat-lbl { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+        #cnTable th, #cnTable td { white-space: nowrap; }
+        .cn-carnum { font-weight: 800; font-size: 13px; font-family: monospace; }
+        .cn-entry-id { font-family: monospace; font-size: 11px; color: var(--muted); }
     </style>
     <!-- Dropbox REST API (No SDK needed) -->
     <script>
@@ -551,6 +574,7 @@
             <button class="nav-btn" onclick="switchView('nav-marry')">Nav Marry</button>
             <button class="nav-btn" onclick="switchView('withdrawals')">Withdrawals</button>
             <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
+            <button class="nav-btn" onclick="switchView('car-numbers')">🔢 Car Numbers</button>
         </div>
     </div>
     <div class="main">
@@ -880,6 +904,79 @@
                 </div>
             </div>
         </div>
+
+        <!-- ══ CAR NUMBERS PAGE ══════════════════════════════════════════════ -->
+        <div id="car-numbers" class="view">
+            <div id="cnMsg" class="message"></div>
+
+            <!-- Controls bar -->
+            <div class="filters" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                <button class="btn-reset" onclick="cnAutoAssign()" title="Auto-assign all unassigned drivers to slots in their category">⚡ Auto-Assign</button>
+                <button class="btn-reset" id="cnClearSwapBtn" onclick="cnCancelSwap()" style="display:none; background:#dc2626;">✕ Cancel Swap</button>
+                <select id="cnCatFilter" class="fsel" onchange="renderCarNumbers()">
+                    <option value="">All Categories</option>
+                    <option value="Prima Tour">Prima Tour</option>
+                    <option value="Zagame">Zagame</option>
+                    <option value="Glenelg BMW">Glenelg BMW</option>
+                    <option value="Peter Page Hyundai">Peter Page Hyundai</option>
+                    <option value="Solitaire">Solitaire</option>
+                    <option value="Adelaide BMW">Adelaide BMW</option>
+                    <option value="Mercedes-Benz">Mercedes-Benz</option>
+                    <option value="Honda">Honda</option>
+                    <option value="Porsche Centre Adelaide">Porsche Centre Adelaide</option>
+                    <option value="Porsche Club">Porsche Club</option>
+                    <option value="Ferrari Club">Ferrari Club</option>
+                    <option value="Main Tour">Main Tour</option>
+                    <option value="Spirit Tour">Spirit Tour</option>
+                    <option value="TSD">TSD</option>
+                    <option value="Challenge 120">Challenge 120</option>
+                    <option value="Challenge 130">Challenge 130</option>
+                    <option value="Competition/Rally Pro">Competition/Rally Pro</option>
+                </select>
+                <select id="cnRoleFilter" class="fsel" onchange="renderCarNumbers()">
+                    <option value="">All Roles</option>
+                    <option value="Tour Leader">Tour Leaders only</option>
+                    <option value="Tour Follower">Tour Followers only</option>
+                    <option value="Entrant">Entrants only</option>
+                </select>
+                <select id="cnStatusFilter" class="fsel" onchange="renderCarNumbers()">
+                    <option value="">All Slots</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="unassigned">Unassigned</option>
+                </select>
+                <input type="text" id="cnSearch" class="fins" placeholder="Search driver or car #..." style="min-width:180px;" oninput="renderCarNumbers()">
+                <button class="btn-reset" style="background:#6B7280;" onclick="cnClearAll()" title="Remove all car number assignments">🗑 Clear All</button>
+            </div>
+
+            <!-- Stats bar -->
+            <div class="cn-stats-bar" id="cnStatsBar"></div>
+
+            <!-- Swap instruction banner (shown when swap is in progress) -->
+            <div id="cnSwapBanner" style="display:none; background:#FFF3CD; border:1px solid #D4A843; border-radius:6px; padding:10px 16px; margin-bottom:12px; font-size:12px; font-weight:600;">
+                🔄 <span id="cnSwapBannerText"></span> — now click <strong>Select</strong> on the destination slot to swap, or click <strong>✕ Cancel Swap</strong> above.
+            </div>
+
+            <!-- Table -->
+            <div class="tbl-wrap">
+                <table id="cnTable">
+                    <thead>
+                        <tr>
+                            <th style="width:50px;">#</th>
+                            <th style="width:90px;">Car #</th>
+                            <th>Category</th>
+                            <th style="width:110px;">Role</th>
+                            <th style="width:90px;">Entry ID</th>
+                            <th>Driver Name</th>
+                            <th style="width:110px; text-align:center;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cnBody"></tbody>
+                </table>
+            </div>
+            <div id="cnNoData" class="no-data" style="display:none;"><p>No data loaded — upload a CSV first</p></div>
+        </div>
+        <!-- ══ END CAR NUMBERS PAGE ══════════════════════════════════════════ -->
+
     </div>
     <footer>
         Adelaide Rally Entry Management System | Data synced to Dropbox
@@ -900,6 +997,8 @@
         let disclaimerLocked = {}; // Track which entries are locked (found via Dropbox verification)
         let withdrawn = new Set(); // Track withdrawn entrant indices
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
+        let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
+        let cnSwapSource = null; // carNum selected as swap source
         let currentView = 'dashboard';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
         let filterOutstandingPayment = false; // Filter for outstanding payments
@@ -2706,6 +2805,8 @@
                     document.getElementById('withdrawnSearch').value = '';
                 }
                 renderWithdrawalTab();
+            } else if (viewName === 'car-numbers') {
+                renderCarNumbers();
             }
             // Only scroll to top if this is a manual view switch (not an auto-sync refresh)
             if (scrollToTop) {
@@ -2750,6 +2851,7 @@
                 disclaimerChecked,
                 disclaimerLocked,
                 withdrawn: Array.from(withdrawn),
+                carNumberAssignments,
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
@@ -2770,6 +2872,7 @@
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
                     withdrawn = new Set(data.withdrawn || []);
+                    carNumberAssignments = data.carNumberAssignments || {};
                     // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
                     lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
@@ -4058,6 +4161,772 @@
                 showMessage('docMsg', 'error', '✗ Error: ' + err.message);
             }
         }
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  CAR NUMBERS PAGE
+        // ═══════════════════════════════════════════════════════════════════
+
+        // Static run-order slot data (derived from Car Numbering.xlsx List tab)
+        const CAR_NUMBER_SLOTS = [
+            {carNum:'PTL1',category:'Prima Tour',role:'Tour Leader'},
+            {carNum:'1',category:'Prima Tour',role:'Entrant'},
+            {carNum:'2',category:'Prima Tour',role:'Entrant'},
+            {carNum:'3',category:'Prima Tour',role:'Entrant'},
+            {carNum:'4',category:'Prima Tour',role:'Entrant'},
+            {carNum:'5',category:'Prima Tour',role:'Entrant'},
+            {carNum:'6',category:'Prima Tour',role:'Entrant'},
+            {carNum:'7',category:'Prima Tour',role:'Entrant'},
+            {carNum:'8',category:'Prima Tour',role:'Entrant'},
+            {carNum:'9',category:'Prima Tour',role:'Entrant'},
+            {carNum:'10',category:'Prima Tour',role:'Entrant'},
+            {carNum:'11',category:'Prima Tour',role:'Entrant'},
+            {carNum:'12',category:'Prima Tour',role:'Entrant'},
+            {carNum:'13',category:'Prima Tour',role:'Entrant'},
+            {carNum:'14',category:'Prima Tour',role:'Entrant'},
+            {carNum:'15',category:'Prima Tour',role:'Entrant'},
+            {carNum:'PTF1',category:'Prima Tour',role:'Tour Follower'},
+            {carNum:'PTL2',category:'Prima Tour',role:'Tour Leader'},
+            {carNum:'16',category:'Prima Tour',role:'Entrant'},
+            {carNum:'17',category:'Prima Tour',role:'Entrant'},
+            {carNum:'18',category:'Prima Tour',role:'Entrant'},
+            {carNum:'19',category:'Prima Tour',role:'Entrant'},
+            {carNum:'20',category:'Prima Tour',role:'Entrant'},
+            {carNum:'21',category:'Prima Tour',role:'Entrant'},
+            {carNum:'22',category:'Prima Tour',role:'Entrant'},
+            {carNum:'23',category:'Prima Tour',role:'Entrant'},
+            {carNum:'24',category:'Prima Tour',role:'Entrant'},
+            {carNum:'25',category:'Prima Tour',role:'Entrant'},
+            {carNum:'26',category:'Prima Tour',role:'Entrant'},
+            {carNum:'27',category:'Prima Tour',role:'Entrant'},
+            {carNum:'28',category:'Prima Tour',role:'Entrant'},
+            {carNum:'29',category:'Prima Tour',role:'Entrant'},
+            {carNum:'30',category:'Prima Tour',role:'Entrant'},
+            {carNum:'PTF2',category:'Prima Tour',role:'Tour Follower'},
+            {carNum:'PTL3',category:'Prima Tour',role:'Tour Leader'},
+            {carNum:'31',category:'Prima Tour',role:'Entrant'},
+            {carNum:'32',category:'Prima Tour',role:'Entrant'},
+            {carNum:'33',category:'Prima Tour',role:'Entrant'},
+            {carNum:'34',category:'Prima Tour',role:'Entrant'},
+            {carNum:'35',category:'Prima Tour',role:'Entrant'},
+            {carNum:'36',category:'Prima Tour',role:'Entrant'},
+            {carNum:'37',category:'Prima Tour',role:'Entrant'},
+            {carNum:'38',category:'Prima Tour',role:'Entrant'},
+            {carNum:'39',category:'Prima Tour',role:'Entrant'},
+            {carNum:'40',category:'Prima Tour',role:'Entrant'},
+            {carNum:'41',category:'Prima Tour',role:'Entrant'},
+            {carNum:'42',category:'Prima Tour',role:'Entrant'},
+            {carNum:'43',category:'Prima Tour',role:'Entrant'},
+            {carNum:'44',category:'Prima Tour',role:'Entrant'},
+            {carNum:'45',category:'Prima Tour',role:'Entrant'},
+            {carNum:'PTF3',category:'Prima Tour',role:'Tour Follower'},
+            {carNum:'PTL4',category:'Prima Tour',role:'Tour Leader'},
+            {carNum:'46',category:'Prima Tour',role:'Entrant'},
+            {carNum:'47',category:'Prima Tour',role:'Entrant'},
+            {carNum:'48',category:'Prima Tour',role:'Entrant'},
+            {carNum:'49',category:'Prima Tour',role:'Entrant'},
+            {carNum:'50',category:'Prima Tour',role:'Entrant'},
+            {carNum:'51',category:'Prima Tour',role:'Entrant'},
+            {carNum:'52',category:'Prima Tour',role:'Entrant'},
+            {carNum:'53',category:'Prima Tour',role:'Entrant'},
+            {carNum:'54',category:'Prima Tour',role:'Entrant'},
+            {carNum:'55',category:'Prima Tour',role:'Entrant'},
+            {carNum:'56',category:'Prima Tour',role:'Entrant'},
+            {carNum:'57',category:'Prima Tour',role:'Entrant'},
+            {carNum:'58',category:'Prima Tour',role:'Entrant'},
+            {carNum:'59',category:'Prima Tour',role:'Entrant'},
+            {carNum:'60',category:'Prima Tour',role:'Entrant'},
+            {carNum:'PTF4',category:'Prima Tour',role:'Tour Follower'},
+            {carNum:'TL1',category:'Zagame',role:'Tour Leader'},
+            {carNum:'101',category:'Zagame',role:'Entrant'},
+            {carNum:'102',category:'Zagame',role:'Entrant'},
+            {carNum:'103',category:'Zagame',role:'Entrant'},
+            {carNum:'104',category:'Zagame',role:'Entrant'},
+            {carNum:'105',category:'Zagame',role:'Entrant'},
+            {carNum:'106',category:'Zagame',role:'Entrant'},
+            {carNum:'107',category:'Zagame',role:'Entrant'},
+            {carNum:'108',category:'Zagame',role:'Entrant'},
+            {carNum:'109',category:'Zagame',role:'Entrant'},
+            {carNum:'110',category:'Zagame',role:'Entrant'},
+            {carNum:'111',category:'Zagame',role:'Entrant'},
+            {carNum:'112',category:'Zagame',role:'Entrant'},
+            {carNum:'113',category:'Zagame',role:'Entrant'},
+            {carNum:'114',category:'Zagame',role:'Entrant'},
+            {carNum:'115',category:'Zagame',role:'Entrant'},
+            {carNum:'TF1',category:'Zagame',role:'Tour Follower'},
+            {carNum:'TL2',category:'Zagame',role:'Tour Leader'},
+            {carNum:'116',category:'Zagame',role:'Entrant'},
+            {carNum:'117',category:'Zagame',role:'Entrant'},
+            {carNum:'118',category:'Zagame',role:'Entrant'},
+            {carNum:'119',category:'Zagame',role:'Entrant'},
+            {carNum:'120',category:'Zagame',role:'Entrant'},
+            {carNum:'121',category:'Zagame',role:'Entrant'},
+            {carNum:'122',category:'Zagame',role:'Entrant'},
+            {carNum:'123',category:'Zagame',role:'Entrant'},
+            {carNum:'124',category:'Zagame',role:'Entrant'},
+            {carNum:'125',category:'Zagame',role:'Entrant'},
+            {carNum:'126',category:'Zagame',role:'Entrant'},
+            {carNum:'127',category:'Zagame',role:'Entrant'},
+            {carNum:'128',category:'Zagame',role:'Entrant'},
+            {carNum:'129',category:'Zagame',role:'Entrant'},
+            {carNum:'130',category:'Zagame',role:'Entrant'},
+            {carNum:'TF2',category:'Zagame',role:'Tour Follower'},
+            {carNum:'TL3',category:'Zagame',role:'Tour Leader'},
+            {carNum:'131',category:'Zagame',role:'Entrant'},
+            {carNum:'132',category:'Zagame',role:'Entrant'},
+            {carNum:'133',category:'Zagame',role:'Entrant'},
+            {carNum:'134',category:'Zagame',role:'Entrant'},
+            {carNum:'135',category:'Zagame',role:'Entrant'},
+            {carNum:'136',category:'Zagame',role:'Entrant'},
+            {carNum:'137',category:'Zagame',role:'Entrant'},
+            {carNum:'138',category:'Zagame',role:'Entrant'},
+            {carNum:'139',category:'Zagame',role:'Entrant'},
+            {carNum:'140',category:'Zagame',role:'Entrant'},
+            {carNum:'141',category:'Zagame',role:'Entrant'},
+            {carNum:'142',category:'Zagame',role:'Entrant'},
+            {carNum:'143',category:'Zagame',role:'Entrant'},
+            {carNum:'144',category:'Zagame',role:'Entrant'},
+            {carNum:'145',category:'Zagame',role:'Entrant'},
+            {carNum:'TF3',category:'Zagame',role:'Tour Follower'},
+            {carNum:'TL14',category:'Glenelg BMW',role:'Tour Leader'},
+            {carNum:'161',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'162',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'163',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'164',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'165',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'166',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'167',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'168',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'169',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'170',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'171',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'172',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'173',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'174',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'175',category:'Glenelg BMW',role:'Entrant'},
+            {carNum:'TF14',category:'Glenelg BMW',role:'Tour Follower'},
+            {carNum:'TL16',category:'Peter Page Hyundai',role:'Tour Leader'},
+            {carNum:'181',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'182',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'183',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'184',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'185',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'186',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'187',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'188',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'189',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'190',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'191',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'192',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'193',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'194',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'195',category:'Peter Page Hyundai',role:'Entrant'},
+            {carNum:'TF16',category:'Peter Page Hyundai',role:'Tour Follower'},
+            {carNum:'TL4',category:'Solitaire',role:'Tour Leader'},
+            {carNum:'201',category:'Solitaire',role:'Entrant'},
+            {carNum:'202',category:'Solitaire',role:'Entrant'},
+            {carNum:'203',category:'Solitaire',role:'Entrant'},
+            {carNum:'204',category:'Solitaire',role:'Entrant'},
+            {carNum:'205',category:'Solitaire',role:'Entrant'},
+            {carNum:'206',category:'Solitaire',role:'Entrant'},
+            {carNum:'207',category:'Solitaire',role:'Entrant'},
+            {carNum:'208',category:'Solitaire',role:'Entrant'},
+            {carNum:'209',category:'Solitaire',role:'Entrant'},
+            {carNum:'210',category:'Solitaire',role:'Entrant'},
+            {carNum:'211',category:'Solitaire',role:'Entrant'},
+            {carNum:'212',category:'Solitaire',role:'Entrant'},
+            {carNum:'213',category:'Solitaire',role:'Entrant'},
+            {carNum:'214',category:'Solitaire',role:'Entrant'},
+            {carNum:'215',category:'Solitaire',role:'Entrant'},
+            {carNum:'TF4',category:'Solitaire',role:'Tour Follower'},
+            {carNum:'TL5',category:'Solitaire',role:'Tour Leader'},
+            {carNum:'216',category:'Solitaire',role:'Entrant'},
+            {carNum:'217',category:'Solitaire',role:'Entrant'},
+            {carNum:'218',category:'Solitaire',role:'Entrant'},
+            {carNum:'219',category:'Solitaire',role:'Entrant'},
+            {carNum:'220',category:'Solitaire',role:'Entrant'},
+            {carNum:'221',category:'Solitaire',role:'Entrant'},
+            {carNum:'222',category:'Solitaire',role:'Entrant'},
+            {carNum:'223',category:'Solitaire',role:'Entrant'},
+            {carNum:'224',category:'Solitaire',role:'Entrant'},
+            {carNum:'225',category:'Solitaire',role:'Entrant'},
+            {carNum:'226',category:'Solitaire',role:'Entrant'},
+            {carNum:'227',category:'Solitaire',role:'Entrant'},
+            {carNum:'228',category:'Solitaire',role:'Entrant'},
+            {carNum:'229',category:'Solitaire',role:'Entrant'},
+            {carNum:'230',category:'Solitaire',role:'Entrant'},
+            {carNum:'TF5',category:'Solitaire',role:'Tour Follower'},
+            {carNum:'TL6',category:'Adelaide BMW',role:'Tour Leader'},
+            {carNum:'231',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'232',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'233',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'234',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'235',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'236',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'237',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'238',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'239',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'240',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'241',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'242',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'243',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'244',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'245',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'TF6',category:'Adelaide BMW',role:'Tour Follower'},
+            {carNum:'TL7',category:'Adelaide BMW',role:'Tour Leader'},
+            {carNum:'246',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'247',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'248',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'249',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'250',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'251',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'252',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'253',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'254',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'255',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'256',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'257',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'258',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'259',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'260',category:'Adelaide BMW',role:'Entrant'},
+            {carNum:'TF7',category:'Adelaide BMW',role:'Tour Follower'},
+            {carNum:'TL8',category:'Mercedes-Benz',role:'Tour Leader'},
+            {carNum:'261',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'262',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'263',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'264',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'265',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'266',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'267',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'268',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'269',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'270',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'271',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'272',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'273',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'274',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'275',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'TF8',category:'Mercedes-Benz',role:'Tour Follower'},
+            {carNum:'TL9',category:'Mercedes-Benz',role:'Tour Leader'},
+            {carNum:'276',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'277',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'278',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'279',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'280',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'281',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'282',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'283',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'284',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'285',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'286',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'287',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'288',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'289',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'290',category:'Mercedes-Benz',role:'Entrant'},
+            {carNum:'TF9',category:'Mercedes-Benz',role:'Tour Follower'},
+            {carNum:'TL15',category:'Honda',role:'Tour Leader'},
+            {carNum:'976',category:'Honda',role:'Entrant'},
+            {carNum:'977',category:'Honda',role:'Entrant'},
+            {carNum:'978',category:'Honda',role:'Entrant'},
+            {carNum:'979',category:'Honda',role:'Entrant'},
+            {carNum:'980',category:'Honda',role:'Entrant'},
+            {carNum:'981',category:'Honda',role:'Entrant'},
+            {carNum:'982',category:'Honda',role:'Entrant'},
+            {carNum:'983',category:'Honda',role:'Entrant'},
+            {carNum:'984',category:'Honda',role:'Entrant'},
+            {carNum:'985',category:'Honda',role:'Entrant'},
+            {carNum:'986',category:'Honda',role:'Entrant'},
+            {carNum:'987',category:'Honda',role:'Entrant'},
+            {carNum:'988',category:'Honda',role:'Entrant'},
+            {carNum:'989',category:'Honda',role:'Entrant'},
+            {carNum:'990',category:'Honda',role:'Entrant'},
+            {carNum:'TF15',category:'Honda',role:'Tour Follower'},
+            {carNum:'TL12',category:'Porsche Centre Adelaide',role:'Tour Leader'},
+            {carNum:'901',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'902',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'903',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'904',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'905',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'906',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'907',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'908',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'909',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'910',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'911',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'912',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'913',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'914',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'915',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'TF12',category:'Porsche Centre Adelaide',role:'Tour Follower'},
+            {carNum:'TL10',category:'Porsche Club',role:'Tour Leader'},
+            {carNum:'921',category:'Porsche Club',role:'Entrant'},
+            {carNum:'922',category:'Porsche Club',role:'Entrant'},
+            {carNum:'923',category:'Porsche Club',role:'Entrant'},
+            {carNum:'924',category:'Porsche Club',role:'Entrant'},
+            {carNum:'925',category:'Porsche Club',role:'Entrant'},
+            {carNum:'926',category:'Porsche Club',role:'Entrant'},
+            {carNum:'927',category:'Porsche Club',role:'Entrant'},
+            {carNum:'928',category:'Porsche Club',role:'Entrant'},
+            {carNum:'929',category:'Porsche Club',role:'Entrant'},
+            {carNum:'930',category:'Porsche Club',role:'Entrant'},
+            {carNum:'931',category:'Porsche Club',role:'Entrant'},
+            {carNum:'932',category:'Porsche Club',role:'Entrant'},
+            {carNum:'933',category:'Porsche Club',role:'Entrant'},
+            {carNum:'934',category:'Porsche Club',role:'Entrant'},
+            {carNum:'935',category:'Porsche Club',role:'Entrant'},
+            {carNum:'TF10',category:'Porsche Club',role:'Tour Follower'},
+            {carNum:'TL11',category:'Porsche Club',role:'Tour Leader'},
+            {carNum:'936',category:'Porsche Club',role:'Entrant'},
+            {carNum:'937',category:'Porsche Club',role:'Entrant'},
+            {carNum:'938',category:'Porsche Club',role:'Entrant'},
+            {carNum:'939',category:'Porsche Club',role:'Entrant'},
+            {carNum:'940',category:'Porsche Club',role:'Entrant'},
+            {carNum:'941',category:'Porsche Club',role:'Entrant'},
+            {carNum:'942',category:'Porsche Club',role:'Entrant'},
+            {carNum:'943',category:'Porsche Club',role:'Entrant'},
+            {carNum:'944',category:'Porsche Club',role:'Entrant'},
+            {carNum:'945',category:'Porsche Club',role:'Entrant'},
+            {carNum:'946',category:'Porsche Club',role:'Entrant'},
+            {carNum:'947',category:'Porsche Club',role:'Entrant'},
+            {carNum:'948',category:'Porsche Club',role:'Entrant'},
+            {carNum:'949',category:'Porsche Club',role:'Entrant'},
+            {carNum:'950',category:'Porsche Club',role:'Entrant'},
+            {carNum:'TF11',category:'Porsche Club',role:'Tour Follower'},
+            {carNum:'TL13',category:'Ferrari Club',role:'Tour Leader'},
+            {carNum:'961',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'962',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'963',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'964',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'965',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'966',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'967',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'968',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'969',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'970',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'971',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'972',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'973',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'974',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'975',category:'Ferrari Club',role:'Entrant'},
+            {carNum:'TF13',category:'Ferrari Club',role:'Tour Follower'},
+            {carNum:'TL17',category:'Main Tour',role:'Tour Leader'},
+            {carNum:'301',category:'Main Tour',role:'Entrant'},
+            {carNum:'302',category:'Main Tour',role:'Entrant'},
+            {carNum:'303',category:'Main Tour',role:'Entrant'},
+            {carNum:'304',category:'Main Tour',role:'Entrant'},
+            {carNum:'305',category:'Main Tour',role:'Entrant'},
+            {carNum:'306',category:'Main Tour',role:'Entrant'},
+            {carNum:'307',category:'Main Tour',role:'Entrant'},
+            {carNum:'308',category:'Main Tour',role:'Entrant'},
+            {carNum:'309',category:'Main Tour',role:'Entrant'},
+            {carNum:'310',category:'Main Tour',role:'Entrant'},
+            {carNum:'311',category:'Main Tour',role:'Entrant'},
+            {carNum:'312',category:'Main Tour',role:'Entrant'},
+            {carNum:'313',category:'Main Tour',role:'Entrant'},
+            {carNum:'314',category:'Main Tour',role:'Entrant'},
+            {carNum:'315',category:'Main Tour',role:'Entrant'},
+            {carNum:'TF17',category:'Main Tour',role:'Tour Follower'},
+            {carNum:'TL18',category:'Main Tour',role:'Tour Leader'},
+            {carNum:'316',category:'Main Tour',role:'Entrant'},
+            {carNum:'317',category:'Main Tour',role:'Entrant'},
+            {carNum:'318',category:'Main Tour',role:'Entrant'},
+            {carNum:'319',category:'Main Tour',role:'Entrant'},
+            {carNum:'320',category:'Main Tour',role:'Entrant'},
+            {carNum:'321',category:'Main Tour',role:'Entrant'},
+            {carNum:'322',category:'Main Tour',role:'Entrant'},
+            {carNum:'323',category:'Main Tour',role:'Entrant'},
+            {carNum:'324',category:'Main Tour',role:'Entrant'},
+            {carNum:'325',category:'Main Tour',role:'Entrant'},
+            {carNum:'326',category:'Main Tour',role:'Entrant'},
+            {carNum:'327',category:'Main Tour',role:'Entrant'},
+            {carNum:'328',category:'Main Tour',role:'Entrant'},
+            {carNum:'329',category:'Main Tour',role:'Entrant'},
+            {carNum:'330',category:'Main Tour',role:'Entrant'},
+            {carNum:'TF18',category:'Main Tour',role:'Tour Follower'},
+            {carNum:'TL19',category:'Main Tour',role:'Tour Leader'},
+            {carNum:'331',category:'Main Tour',role:'Entrant'},
+            {carNum:'332',category:'Main Tour',role:'Entrant'},
+            {carNum:'333',category:'Main Tour',role:'Entrant'},
+            {carNum:'334',category:'Main Tour',role:'Entrant'},
+            {carNum:'335',category:'Main Tour',role:'Entrant'},
+            {carNum:'336',category:'Main Tour',role:'Entrant'},
+            {carNum:'337',category:'Main Tour',role:'Entrant'},
+            {carNum:'338',category:'Main Tour',role:'Entrant'},
+            {carNum:'339',category:'Main Tour',role:'Entrant'},
+            {carNum:'340',category:'Main Tour',role:'Entrant'},
+            {carNum:'341',category:'Main Tour',role:'Entrant'},
+            {carNum:'342',category:'Main Tour',role:'Entrant'},
+            {carNum:'343',category:'Main Tour',role:'Entrant'},
+            {carNum:'344',category:'Main Tour',role:'Entrant'},
+            {carNum:'345',category:'Main Tour',role:'Entrant'},
+            {carNum:'TF19',category:'Main Tour',role:'Tour Follower'},
+            {carNum:'STL1',category:'Spirit Tour',role:'Tour Leader'},
+            {carNum:'401',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'402',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'403',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'404',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'405',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'406',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'407',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'408',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'409',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'410',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'411',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'412',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'413',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'414',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'415',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'416',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'417',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'418',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'419',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'420',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'421',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'422',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'423',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'424',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'425',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'426',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'427',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'428',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'429',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'430',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'431',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'432',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'433',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'434',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'435',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'436',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'437',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'438',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'439',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'440',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'441',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'442',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'443',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'444',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'445',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'446',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'447',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'448',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'449',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'450',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'451',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'452',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'453',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'454',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'455',category:'Spirit Tour',role:'Entrant'},
+            {carNum:'STF1',category:'Spirit Tour',role:'Tour Follower'},
+            {carNum:'501',category:'TSD',role:'Entrant'},
+            {carNum:'502',category:'TSD',role:'Entrant'},
+            {carNum:'503',category:'TSD',role:'Entrant'},
+            {carNum:'504',category:'TSD',role:'Entrant'},
+            {carNum:'505',category:'TSD',role:'Entrant'},
+            {carNum:'506',category:'TSD',role:'Entrant'},
+            {carNum:'507',category:'TSD',role:'Entrant'},
+            {carNum:'508',category:'TSD',role:'Entrant'},
+            {carNum:'509',category:'TSD',role:'Entrant'},
+            {carNum:'510',category:'TSD',role:'Entrant'},
+            {carNum:'511',category:'TSD',role:'Entrant'},
+            {carNum:'512',category:'TSD',role:'Entrant'},
+            {carNum:'601',category:'Challenge 120',role:'Entrant'},
+            {carNum:'602',category:'Challenge 120',role:'Entrant'},
+            {carNum:'603',category:'Challenge 120',role:'Entrant'},
+            {carNum:'604',category:'Challenge 120',role:'Entrant'},
+            {carNum:'605',category:'Challenge 120',role:'Entrant'},
+            {carNum:'606',category:'Challenge 120',role:'Entrant'},
+            {carNum:'607',category:'Challenge 120',role:'Entrant'},
+            {carNum:'608',category:'Challenge 120',role:'Entrant'},
+            {carNum:'609',category:'Challenge 120',role:'Entrant'},
+            {carNum:'610',category:'Challenge 120',role:'Entrant'},
+            {carNum:'611',category:'Challenge 120',role:'Entrant'},
+            {carNum:'612',category:'Challenge 120',role:'Entrant'},
+            {carNum:'651',category:'Challenge 130',role:'Entrant'},
+            {carNum:'652',category:'Challenge 130',role:'Entrant'},
+            {carNum:'653',category:'Challenge 130',role:'Entrant'},
+            {carNum:'654',category:'Challenge 130',role:'Entrant'},
+            {carNum:'655',category:'Challenge 130',role:'Entrant'},
+            {carNum:'656',category:'Challenge 130',role:'Entrant'},
+            {carNum:'657',category:'Challenge 130',role:'Entrant'},
+            {carNum:'658',category:'Challenge 130',role:'Entrant'},
+            {carNum:'659',category:'Challenge 130',role:'Entrant'},
+            {carNum:'660',category:'Challenge 130',role:'Entrant'},
+            {carNum:'661',category:'Challenge 130',role:'Entrant'},
+            {carNum:'662',category:'Challenge 130',role:'Entrant'},
+            {carNum:'701',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'702',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'703',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'704',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'705',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'706',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'707',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'708',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'709',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'710',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'711',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'712',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'713',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'714',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'715',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'716',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'717',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'718',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'719',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'720',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'721',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'722',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'723',category:'Competition/Rally Pro',role:'Entrant'},
+            {carNum:'724',category:'Competition/Rally Pro',role:'Entrant'},
+        ];
+
+        // Maps driverEntryConfig.category → CAR_NUMBER_SLOTS category
+        const CN_CATEGORY_MAP = {
+            'Prima Tour':           'Prima Tour',
+            'Zagame':               'Zagame',
+            'Glenelg BMW':          'Glenelg BMW',
+            'BMW MINI':             'Adelaide BMW',
+            'Mercedes':             'Mercedes-Benz',
+            'Honda':                'Honda',
+            'Hyundai':              'Peter Page Hyundai',
+            'Porsche Centre':       'Porsche Centre Adelaide',
+            'Porsche Club':         'Porsche Club',
+            'Ferrari Club':         'Ferrari Club',
+            'Main Tour':            'Main Tour',
+            'Spirit Tour':          'Spirit Tour',
+            'TSD':                  'TSD',
+            'Challenge 120':        'Challenge 120',
+            'Challenge 130':        'Challenge 130',
+            'Comp/Rally Pro':       'Competition/Rally Pro',
+            'Solitaire':            'Solitaire',
+        };
+
+        // ── Auto-assign ─────────────────────────────────────────────────────
+        function cnAutoAssign() {
+            if (csvData.length === 0) {
+                showMessage('cnMsg', 'error', '❌ No CSV data loaded. Please upload a CSV file first.');
+                return;
+            }
+            const localEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const entryIdColIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const fnIdx             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lnIdx             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+
+            // Build per-slot-category list of unassigned drivers (in CSV order)
+            const alreadyAssignedIds = new Set(
+                Object.values(carNumberAssignments).map(a => a && a.entryId).filter(Boolean)
+            );
+            const byCat = {}; // slotCategory → [{entryId, driverName}, ...]
+
+            csvData.forEach(row => {
+                // Only Driver main entry types
+                if (localEntryTypeIdx >= 0 && (row[localEntryTypeIdx]||'').trim() !== 'Driver') return;
+
+                for (const config of driverEntryConfig) {
+                    if (config.category === 'Tour Leader / Follower') continue;
+                    const hIdx = csvHeaders.findIndex(h => h === config.header1);
+                    if (hIdx < 0) continue;
+                    if ((row[hIdx]||'').trim() !== config.trigger1) continue;
+
+                    const slotCat = CN_CATEGORY_MAP[config.category];
+                    if (!slotCat) break;
+
+                    const eid  = entryIdColIdx >= 0 ? (row[entryIdColIdx]||'').trim() : '';
+                    const fn   = fnIdx >= 0 ? (row[fnIdx]||'').trim() : '';
+                    const ln   = lnIdx >= 0 ? (row[lnIdx]||'').trim() : '';
+                    const name = [fn, ln].filter(Boolean).join(' ');
+
+                    if (eid && !alreadyAssignedIds.has(eid)) {
+                        if (!byCat[slotCat]) byCat[slotCat] = [];
+                        byCat[slotCat].push({entryId: eid, driverName: name});
+                    }
+                    break;
+                }
+            });
+
+            // Iterate slots in run order, fill empty Entrant slots only
+            const cursors = {};
+            let newCount = 0;
+            CAR_NUMBER_SLOTS.forEach(slot => {
+                if (slot.role !== 'Entrant') return;          // skip TL/TF
+                if (carNumberAssignments[slot.carNum]) return; // already filled
+
+                const pool = byCat[slot.category];
+                if (!pool) return;
+
+                const cur = cursors[slot.category] || 0;
+                if (cur >= pool.length) return;
+
+                const entry = pool[cur];
+                cursors[slot.category] = cur + 1;
+                carNumberAssignments[slot.carNum] = entry;
+                alreadyAssignedIds.add(entry.entryId);
+                newCount++;
+            });
+
+            saveToStorage();
+            renderCarNumbers();
+            showMessage('cnMsg', 'success', `✓ Auto-assigned ${newCount} driver${newCount !== 1 ? 's' : ''} to car numbers. TL/TF slots require manual assignment.`);
+        }
+
+        // ── Swap helpers ────────────────────────────────────────────────────
+        function cnSelectSlot(carNum) {
+            if (cnSwapSource === null) {
+                // Select this slot as the source
+                cnSwapSource = carNum;
+                document.getElementById('cnClearSwapBtn').style.display = '';
+                document.getElementById('cnSwapBanner').style.display = '';
+                document.getElementById('cnSwapBannerText').textContent =
+                    `Car #${carNum} selected${carNumberAssignments[carNum] ? ' (' + carNumberAssignments[carNum].driverName + ')' : ' (empty slot)'}`;
+                renderCarNumbers();
+            } else if (cnSwapSource === carNum) {
+                cnCancelSwap();
+            } else {
+                // Perform swap
+                const asgA = carNumberAssignments[cnSwapSource] ? {...carNumberAssignments[cnSwapSource]} : null;
+                const asgB = carNumberAssignments[carNum]       ? {...carNumberAssignments[carNum]}       : null;
+                if (asgA) carNumberAssignments[carNum]       = asgA; else delete carNumberAssignments[carNum];
+                if (asgB) carNumberAssignments[cnSwapSource] = asgB; else delete carNumberAssignments[cnSwapSource];
+                cnSwapSource = null;
+                document.getElementById('cnClearSwapBtn').style.display = 'none';
+                document.getElementById('cnSwapBanner').style.display = 'none';
+                saveToStorage();
+                renderCarNumbers();
+                showMessage('cnMsg', 'success', `✓ Swapped: Car #${asgA ? asgA.driverName : '(empty)'} ↔ Car #${asgB ? asgB.driverName : '(empty)'}`);
+            }
+        }
+
+        function cnCancelSwap() {
+            cnSwapSource = null;
+            document.getElementById('cnClearSwapBtn').style.display = 'none';
+            document.getElementById('cnSwapBanner').style.display = 'none';
+            renderCarNumbers();
+        }
+
+        function cnClearAll() {
+            if (!confirm('Clear ALL car number assignments? This cannot be undone.')) return;
+            carNumberAssignments = {};
+            saveToStorage();
+            renderCarNumbers();
+            showMessage('cnMsg', 'info', 'All car number assignments cleared.');
+        }
+
+        // ── Render ──────────────────────────────────────────────────────────
+        function renderCarNumbers() {
+            const catFilter    = (document.getElementById('cnCatFilter')    || {}).value || '';
+            const roleFilter   = (document.getElementById('cnRoleFilter')   || {}).value || '';
+            const statusFilter = (document.getElementById('cnStatusFilter') || {}).value || '';
+            const search       = ((document.getElementById('cnSearch')      || {}).value || '').toLowerCase().trim();
+
+            const tbody = document.getElementById('cnBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            // Stats
+            let totalSlots = 0, assignedSlots = 0;
+            CAR_NUMBER_SLOTS.forEach(s => {
+                if (s.role === 'Entrant') {
+                    totalSlots++;
+                    if (carNumberAssignments[s.carNum]) assignedSlots++;
+                }
+            });
+            const tlCount = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Leader' && carNumberAssignments[s.carNum]).length;
+            const tfCount = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Follower' && carNumberAssignments[s.carNum]).length;
+
+            const statsBar = document.getElementById('cnStatsBar');
+            if (statsBar) {
+                statsBar.innerHTML = `
+                    <div class="cn-stat"><div class="cn-stat-num">${assignedSlots}</div><div class="cn-stat-lbl">Assigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots - assignedSlots}</div><div class="cn-stat-lbl">Unassigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots}</div><div class="cn-stat-lbl">Total Slots</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${tlCount}</div><div class="cn-stat-lbl">TL Assigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${tfCount}</div><div class="cn-stat-lbl">TF Assigned</div></div>
+                `;
+            }
+
+            // Entrant row counter for alternating colours (reset per category)
+            let entrantCounterByCat = {};
+            let visibleCount = 0;
+
+            CAR_NUMBER_SLOTS.forEach((slot, idx) => {
+                const asg = carNumberAssignments[slot.carNum] || null;
+                const isAssigned = !!asg;
+
+                // Apply filters
+                if (catFilter    && slot.category !== catFilter)   return;
+                if (roleFilter   && slot.role     !== roleFilter)   return;
+                if (statusFilter === 'assigned'   && !isAssigned)   return;
+                if (statusFilter === 'unassigned' && isAssigned)    return;
+                if (search) {
+                    const haystack = [slot.carNum, slot.category, slot.role,
+                        asg ? asg.entryId : '', asg ? asg.driverName : ''].join(' ').toLowerCase();
+                    if (!haystack.includes(search)) return;
+                }
+
+                visibleCount++;
+                const isSource  = cnSwapSource !== null && cnSwapSource === slot.carNum;
+                const isTarget  = cnSwapSource !== null && cnSwapSource !== slot.carNum;
+
+                const tr = document.createElement('tr');
+
+                // Row class
+                if (isSource) {
+                    tr.className = 'cn-row-selected';
+                } else if (slot.role === 'Tour Leader') {
+                    tr.className = 'cn-row-tl';
+                } else if (slot.role === 'Tour Follower') {
+                    tr.className = 'cn-row-tf';
+                } else {
+                    // Alternate entrant rows per category
+                    if (!entrantCounterByCat[slot.category]) entrantCounterByCat[slot.category] = 0;
+                    const alt = entrantCounterByCat[slot.category] % 2 === 0;
+                    entrantCounterByCat[slot.category]++;
+                    tr.className = 'cn-row-entrant' + (alt ? '' : ' cn-alt');
+                    if (isTarget) tr.classList.add('cn-row-swap-target');
+                }
+
+                // Role badge
+                let roleBadge = '';
+                if      (slot.role === 'Tour Leader')   roleBadge = `<span class="cn-badge-tl">TL</span>`;
+                else if (slot.role === 'Tour Follower') roleBadge = `<span class="cn-badge-tf">TF</span>`;
+                else                                    roleBadge = `<span class="cn-badge-ent">Entrant</span>`;
+
+                // Swap button
+                let btnClass, btnLabel;
+                if (isSource) {
+                    btnClass = 'source'; btnLabel = '✓ Selected';
+                } else if (cnSwapSource !== null) {
+                    btnClass = 'target'; btnLabel = 'Swap Here';
+                } else {
+                    btnClass = 'idle'; btnLabel = 'Select';
+                }
+
+                const entryIdDisplay = asg ? `<span class="cn-entry-id">${asg.entryId}</span>` : '';
+                const driverDisplay  = asg ? asg.driverName : `<span class="cn-unassigned">— unassigned —</span>`;
+
+                tr.innerHTML = `
+                    <td style="text-align:center; color:#888;">${idx + 1}</td>
+                    <td><span class="cn-carnum">${slot.carNum}</span></td>
+                    <td>${slot.category}</td>
+                    <td>${roleBadge}</td>
+                    <td>${entryIdDisplay}</td>
+                    <td>${driverDisplay}</td>
+                    <td style="text-align:center;">
+                        <button class="cn-swap-btn ${btnClass}" onclick="cnSelectSlot('${slot.carNum}')">${btnLabel}</button>
+                    </td>`;
+
+                tbody.appendChild(tr);
+            });
+
+            const noData = document.getElementById('cnNoData');
+            const table  = document.getElementById('cnTable');
+            if (visibleCount === 0) {
+                if (noData) noData.style.display = '';
+                if (table)  table.style.display  = 'none';
+            } else {
+                if (noData) noData.style.display = 'none';
+                if (table)  table.style.display  = '';
+            }
+        }
+
     </script>
 </body>
 </html>
