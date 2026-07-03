@@ -945,7 +945,31 @@
                     <option value="unassigned">Unassigned</option>
                 </select>
                 <input type="text" id="cnSearch" class="fins" placeholder="Search driver or car #..." style="min-width:180px;" oninput="renderCarNumbers()">
-                <button class="btn-reset" style="background:#6B7280;" onclick="cnClearAll()" title="Remove all car number assignments">🗑 Clear All</button>
+                <button class="btn-reset" style="background:#16A34A;" onclick="cnToggleInsert()" id="cnInsertBtn" title="Manually insert a car number assignment">➕ Insert</button>
+            </div>
+
+            <!-- Manual insert panel -->
+            <div id="cnInsertPanel" style="display:none; background:#F0FDF4; border:1px solid #86EFAC; border-radius:8px; padding:14px 18px; margin-bottom:14px;">
+                <div style="font-size:12px; font-weight:700; color:#15803D; margin-bottom:10px;">➕ Manually Insert Car Number</div>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;">
+                    <div>
+                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Car Number</div>
+                        <select id="cnInsertCarNum" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; min-width:140px;">
+                            <option value="">— select slot —</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Entry ID</div>
+                        <input type="text" id="cnInsertEntryId" placeholder="e.g. 388" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; width:90px;">
+                    </div>
+                    <div>
+                        <div style="font-size:10px; color:#555; margin-bottom:3px;">Name</div>
+                        <input type="text" id="cnInsertName" placeholder="First Last" style="font-size:12px; padding:5px 8px; border:1px solid #ccc; border-radius:5px; width:180px;">
+                    </div>
+                    <button class="btn-reset" style="background:#16A34A; padding:6px 16px;" onclick="cnInsertManual()">✓ Insert</button>
+                    <button class="btn-reset" style="background:#6B7280; padding:6px 12px;" onclick="cnToggleInsert()">Cancel</button>
+                </div>
+                <div id="cnInsertMsg" style="margin-top:8px; font-size:11px; color:#DC2626; display:none;"></div>
             </div>
 
             <!-- Stats bar -->
@@ -1019,6 +1043,7 @@
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let cnSwapSource = null; // carNum selected as swap source
+        let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
         let currentView = 'dashboard';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
         let filterOutstandingPayment = false; // Filter for outstanding payments
@@ -4844,6 +4869,74 @@
             showMessage('cnMsg', 'info', 'All car number assignments cleared.');
         }
 
+        function cnToggleInsert() {
+            const panel = document.getElementById('cnInsertPanel');
+            const btn   = document.getElementById('cnInsertBtn');
+            if (!panel) return;
+            const showing = panel.style.display !== 'none';
+            panel.style.display = showing ? 'none' : '';
+            btn.textContent = showing ? '➕ Insert' : '✕ Close Insert';
+            if (!showing) {
+                // Populate the car number select with all unassigned slots
+                const sel = document.getElementById('cnInsertCarNum');
+                if (sel) {
+                    sel.innerHTML = '<option value="">— select slot —</option>';
+                    CAR_NUMBER_SLOTS.forEach(slot => {
+                        const asg = carNumberAssignments[slot.carNum];
+                        const isUsed = asg && !cnWithdrawnEntryIds.has(asg.entryId);
+                        const opt = document.createElement('option');
+                        opt.value = slot.carNum;
+                        const roleTag = slot.role === 'Tour Leader' ? ' [TL]' : slot.role === 'Tour Follower' ? ' [TF]' : '';
+                        opt.textContent = '#' + slot.carNum + ' ' + slot.category + roleTag + (isUsed ? ' ✓' : '');
+                        if (isUsed) opt.style.color = '#9CA3AF';
+                        sel.appendChild(opt);
+                    });
+                }
+                document.getElementById('cnInsertMsg').style.display = 'none';
+            }
+        }
+
+        function cnInsertManual() {
+            const carNum  = (document.getElementById('cnInsertCarNum').value || '').trim();
+            const entryId = (document.getElementById('cnInsertEntryId').value || '').trim();
+            const name    = (document.getElementById('cnInsertName').value || '').trim();
+            const msgEl   = document.getElementById('cnInsertMsg');
+
+            const showErr = (msg) => { msgEl.textContent = msg; msgEl.style.display = ''; msgEl.style.color = '#DC2626'; };
+            const showOk  = (msg) => { msgEl.textContent = msg; msgEl.style.display = ''; msgEl.style.color = '#15803D'; };
+
+            if (!carNum) { showErr('❌ Please select a car number slot.'); return; }
+            if (!name)   { showErr('❌ Please enter a name.'); return; }
+
+            // Check duplicate car number (slot already has a non-withdrawn assignment)
+            const existing = carNumberAssignments[carNum];
+            if (existing && !cnWithdrawnEntryIds.has(existing.entryId)) {
+                showErr(`❌ Car #${carNum} is already assigned to ${existing.driverName}. Use the Swap button to change it.`);
+                return;
+            }
+
+            // Check duplicate entry ID (same person already has a different car number)
+            if (entryId) {
+                const conflict = Object.entries(carNumberAssignments).find(([cn, a]) =>
+                    a && a.entryId === entryId && !cnWithdrawnEntryIds.has(a.entryId) && cn !== carNum
+                );
+                if (conflict) {
+                    showErr(`❌ Entry ID ${entryId} is already assigned to car #${conflict[0]}.`);
+                    return;
+                }
+            }
+
+            carNumberAssignments[carNum] = {entryId: entryId || ('manual-' + carNum), driverName: name};
+            saveToStorage();
+            renderCarNumbers();
+            showOk(`✓ Car #${carNum} assigned to ${name}`);
+            document.getElementById('cnInsertEntryId').value = '';
+            document.getElementById('cnInsertName').value = '';
+            document.getElementById('cnInsertCarNum').value = '';
+            // Refresh the slot dropdown to reflect new state
+            cnToggleInsert(); cnToggleInsert();
+        }
+
         function cnAssignFromReconcile(entryId, driverName, selectElemId) {
             const selectElem = document.getElementById(selectElemId);
             if (!selectElem) return;
@@ -4873,6 +4966,7 @@
             tbody.innerHTML = '';
 
             // Build set of withdrawn entry IDs so we can flag them in the table
+            // Also updates the global cnWithdrawnEntryIds so Insert panel functions can use it
             const localEntryIdIdxR = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
             const withdrawnEntryIds = new Set();
             if (localEntryIdIdxR >= 0) {
@@ -4883,6 +4977,7 @@
                     }
                 });
             }
+            cnWithdrawnEntryIds = withdrawnEntryIds; // sync global
 
             // Stats — count across ALL 508 car number slots
             let totalAll = CAR_NUMBER_SLOTS.length;
@@ -4905,7 +5000,6 @@
                 statsBar.innerHTML = `
                     <div class="cn-stat"><div class="cn-stat-num">${assignedAll}</div><div class="cn-stat-lbl">Assigned</div></div>
                     <div class="cn-stat"><div class="cn-stat-num">${totalAll - assignedAll}</div><div class="cn-stat-lbl">Unassigned</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${totalAll}</div><div class="cn-stat-lbl">Total Car Numbers</div></div>
                     <div class="cn-stat" style="border-top-color:#1B3A6B;"><div class="cn-stat-num" style="color:#1B3A6B;">${tlUnassigned}</div><div class="cn-stat-lbl">TL Unassigned</div></div>
                     <div class="cn-stat" style="border-top-color:#3A3A3A;"><div class="cn-stat-num" style="color:#3A3A3A;">${tfUnassigned}</div><div class="cn-stat-lbl">TF Unassigned</div></div>
                 `;
@@ -4929,12 +5023,18 @@
                 totalActiveDrivers++;
                 const eid = entryIdColIdxCN >= 0 ? (row[entryIdColIdxCN]||'').trim() : '';
                 if (eid && assignedEntryIds.has(eid)) return; // already assigned
-                // Find category — case-insensitive trimmed header match
+                // Find category — strict header match first (same as auto-assign), with startsWith trigger for partials
                 let cat = '';
                 for (const config of driverEntryConfig) {
                     if (config.category === 'Tour Leader / Follower') continue;
-                    const hIdx = csvHeaders.findIndex(h => h.trim().toLowerCase() === config.header1.trim().toLowerCase());
-                    if (hIdx >= 0 && (row[hIdx]||'').trim() === config.trigger1) { cat = config.category; break; }
+                    // Try strict match first (fastest, same as auto-assign), then case-insensitive fallback
+                    let hIdx = csvHeaders.findIndex(h => h === config.header1);
+                    if (hIdx < 0) hIdx = csvHeaders.findIndex(h => h.trim().toLowerCase() === config.header1.trim().toLowerCase());
+                    if (hIdx < 0) continue;
+                    const val = (row[hIdx]||'').trim();
+                    if (!val) continue;
+                    // Strict match first; fall back to startsWith to handle values like 'Competition/Rally Pro' vs trigger 'Competition'
+                    if (val === config.trigger1 || val.startsWith(config.trigger1)) { cat = config.category; break; }
                 }
                 const fn = fnIdxCN >= 0 ? (row[fnIdxCN]||'').trim() : '';
                 const ln = lnIdxCN >= 0 ? (row[lnIdxCN]||'').trim() : '';
