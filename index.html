@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.0b - Car Numbers table columns updated 2026-07-03 -->
+<!-- Adelaide Rally 2026 Dashboard v3.2 - Mercedes-Benz fix + car number reconciliation 2026-07-03 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -956,6 +956,27 @@
                 🔄 <span id="cnSwapBannerText"></span> — now click <strong>Select</strong> on the destination slot to swap, or click <strong>✕ Cancel Swap</strong> above.
             </div>
 
+            <!-- Reconciliation panel — shows drivers without car numbers -->
+            <div id="cnReconcilePanel" style="display:none; background:#FFF3CD; border:1px solid #D4A843; border-radius:8px; padding:14px 18px; margin-bottom:14px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                    <strong style="font-size:12px; color:#7B5900;">⚠️ <span id="cnReconcileTitle"></span></strong>
+                    <button class="btn-reset" style="font-size:10px; padding:4px 10px;" onclick="document.getElementById('cnReconcileBody').style.display = document.getElementById('cnReconcileBody').style.display==='none'?'':'none'; this.textContent=this.textContent.includes('Show')?'Hide drivers▲':'Show drivers▼'">Show drivers▼</button>
+                </div>
+                <div id="cnReconcileBody" style="display:none;">
+                    <table style="width:100%; font-size:11px; border-collapse:collapse;" id="cnReconcileTable">
+                        <thead><tr style="background:#F5E8B0;">
+                            <th style="padding:6px 10px; text-align:left;">Entry ID</th>
+                            <th style="padding:6px 10px; text-align:left;">Driver Name</th>
+                            <th style="padding:6px 10px; text-align:left;">Category</th>
+                        </tr></thead>
+                        <tbody id="cnReconcileTbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="cnReconcileOk" style="display:none; background:#D4EDDA; border:1px solid #22C55E; border-radius:8px; padding:10px 18px; margin-bottom:14px; font-size:12px; color:#155724; font-weight:600;">
+                ✓ All <span id="cnReconcileOkCount"></span> active drivers have been assigned a car number.
+            </div>
+
             <!-- Table -->
             <div class="tbl-wrap">
                 <table id="cnTable">
@@ -1449,6 +1470,7 @@
             {category: 'Solitaire', capacity: 34, header1: 'I am entering the Solitaire Branded Tour', trigger1: 'Solitaire'},
             {category: 'Glenelg BMW', capacity: 17, header1: 'I am entering the Glenelg BMW Branded Tour', trigger1: 'Glenelg BMW'},
             {category: 'BMW MINI', capacity: 26, header1: 'I am entering the Adelaide BMW Branded Tour', trigger1: 'Adelaide BMW'},
+            {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes-Benz'},
             {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes AMG'},
             {category: 'Honda', capacity: 17, header1: 'I am entering the Honda Branded Tour', trigger1: 'Honda'},
             {category: 'Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Hyundai'},
@@ -4683,6 +4705,7 @@
             'Glenelg BMW':          'Glenelg BMW',
             'BMW MINI':             'Adelaide BMW',
             'Mercedes':             'Mercedes-Benz',
+            'Mercedes-Benz':        'Mercedes-Benz',
             'Honda':                'Honda',
             'Hyundai':              'Peter Page Hyundai',
             'Porsche Centre':       'Porsche Centre Adelaide',
@@ -4868,6 +4891,66 @@
                     <div class="cn-stat" style="border-top-color:#1B3A6B;"><div class="cn-stat-num" style="color:#1B3A6B;">${tlUnassigned}</div><div class="cn-stat-lbl">TL Unassigned</div></div>
                     <div class="cn-stat" style="border-top-color:#3A3A3A;"><div class="cn-stat-num" style="color:#3A3A3A;">${tfUnassigned}</div><div class="cn-stat-lbl">TF Unassigned</div></div>
                 `;
+            }
+
+            // ── Reconciliation: find active drivers without a car number ────
+            const localEntryTypeIdxCN = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const entryIdColIdxCN     = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const fnIdxCN             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lnIdxCN             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+
+            const assignedEntryIds = new Set(
+                Object.values(carNumberAssignments).map(a => a && a.entryId).filter(Boolean)
+            );
+
+            const driversWithoutCar = [];
+            let totalActiveDrivers = 0;
+            csvData.forEach((row, rowIdx) => {
+                if (withdrawn.has(rowIdx)) return;
+                if (localEntryTypeIdxCN >= 0 && (row[localEntryTypeIdxCN]||'').trim() !== 'Driver') return;
+                totalActiveDrivers++;
+                const eid = entryIdColIdxCN >= 0 ? (row[entryIdColIdxCN]||'').trim() : '';
+                if (eid && assignedEntryIds.has(eid)) return; // already assigned
+                // Find category
+                let cat = '';
+                for (const config of driverEntryConfig) {
+                    if (config.category === 'Tour Leader / Follower') continue;
+                    const hIdx = csvHeaders.findIndex(h => h === config.header1);
+                    if (hIdx >= 0 && (row[hIdx]||'').trim() === config.trigger1) { cat = config.category; break; }
+                }
+                const fn = fnIdxCN >= 0 ? (row[fnIdxCN]||'').trim() : '';
+                const ln = lnIdxCN >= 0 ? (row[lnIdxCN]||'').trim() : '';
+                driversWithoutCar.push({entryId: eid, driverName: [fn,ln].filter(Boolean).join(' '), category: cat});
+            });
+
+            const reconcilePanel = document.getElementById('cnReconcilePanel');
+            const reconcileOk    = document.getElementById('cnReconcileOk');
+            if (driversWithoutCar.length > 0) {
+                if (reconcilePanel) {
+                    reconcilePanel.style.display = '';
+                    document.getElementById('cnReconcileTitle').textContent =
+                        `${driversWithoutCar.length} active driver${driversWithoutCar.length !== 1 ? 's' : ''} (of ${totalActiveDrivers}) have no car number assigned`;
+                    const tb = document.getElementById('cnReconcileTbody');
+                    if (tb) {
+                        tb.innerHTML = driversWithoutCar.map((d,i) =>
+                            `<tr style="background:${i%2===0?'#fff':'#FFF8E8'}">
+                                <td style="padding:5px 10px; font-family:monospace;">${d.entryId}</td>
+                                <td style="padding:5px 10px; font-weight:600;">${d.driverName}</td>
+                                <td style="padding:5px 10px; color:#666;">${d.category}</td>
+                            </tr>`
+                        ).join('');
+                    }
+                }
+                if (reconcileOk) reconcileOk.style.display = 'none';
+            } else if (totalActiveDrivers > 0) {
+                if (reconcilePanel) reconcilePanel.style.display = 'none';
+                if (reconcileOk) {
+                    reconcileOk.style.display = '';
+                    document.getElementById('cnReconcileOkCount').textContent = totalActiveDrivers;
+                }
+            } else {
+                if (reconcilePanel) reconcilePanel.style.display = 'none';
+                if (reconcileOk) reconcileOk.style.display = 'none';
             }
 
             // Entrant row counter for alternating colours (reset per category)
