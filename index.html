@@ -2682,13 +2682,15 @@
             if (already) return;
             manualNavMatches.push({ driverEntryId, navigatorEntryId });
             saveToStorage();
-            renderNavMarry();
+            renderNavMarryTable();
+            showMessage('navMsg', 'success', `✓ Pair matched manually — they have been moved to the Confirmed Pairs table below.`);
         }
 
         function navManualUnmatch(driverEntryId, navigatorEntryId) {
             manualNavMatches = manualNavMatches.filter(m => !(m.driverEntryId === driverEntryId && m.navigatorEntryId === navigatorEntryId));
             saveToStorage();
-            renderNavMarry();
+            renderNavMarryTable();
+            showMessage('navMsg', 'info', `Pairing removed — they have been returned to the unmatched list.`);
         }
 
         function renderMALicenceTable() {
