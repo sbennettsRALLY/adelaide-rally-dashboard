@@ -1499,7 +1499,8 @@
             {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes-Benz'},
             {category: 'Mercedes', capacity: 24, header1: 'I am entering the Mercedes AMG Branded Tour', trigger1: 'Mercedes AMG'},
             {category: 'Honda', capacity: 17, header1: 'I am entering the Honda Branded Tour', trigger1: 'Honda'},
-            {category: 'Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Hyundai'},
+            {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Peter Page Hyundai'},
+            {category: 'Peter Page Hyundai', capacity: 17, header1: 'I am entering the Peter Page Hyundai Branded Tour', trigger1: 'Hyundai'},
             {category: 'Porsche Centre', capacity: 17, header1: 'I am entering the Porsche Centre Adelaide Branded Tour (Driver)', trigger1: 'Porsche Centre Adelaide'},
             {category: 'Porsche Club', capacity: 34, header1: 'I am entering the Porsche Club Branded Tour', trigger1: 'Porsche Club'},
             {category: 'Ferrari Club', capacity: 17, header1: 'I am entering the Ferrari Club Branded Tour', trigger1: 'Ferrari Club'},
@@ -1531,7 +1532,7 @@
             {category: 'BMW MINI', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Mercedes', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Honda', entryFee: 2177.27, isBrandedTour: true},
-            {category: 'Hyundai', entryFee: 2177.27, isBrandedTour: true},
+            {category: 'Peter Page Hyundai', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Porsche Centre', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Porsche Club', entryFee: 2177.27, isBrandedTour: true},
             {category: 'Ferrari Club', entryFee: 2177.27, isBrandedTour: true},
@@ -4733,7 +4734,8 @@
             'Mercedes':             'Mercedes-Benz',
             'Mercedes-Benz':        'Mercedes-Benz',
             'Honda':                'Honda',
-            'Hyundai':              'Peter Page Hyundai',
+            'Peter Page Hyundai':   'Peter Page Hyundai',
+            'Hyundai':              'Peter Page Hyundai',   // legacy fallback
             'Porsche Centre':       'Porsche Centre Adelaide',
             'Porsche Club':         'Porsche Club',
             'Ferrari Club':         'Ferrari Club',
@@ -5019,14 +5021,17 @@
             let totalActiveDrivers = 0;
             csvData.forEach((row, rowIdx) => {
                 if (withdrawn.has(rowIdx)) return;
-                if (localEntryTypeIdxCN >= 0 && (row[localEntryTypeIdxCN]||'').trim() !== 'Driver') return;
+                if (localEntryTypeIdxCN >= 0) {
+                    const et = (row[localEntryTypeIdxCN]||'').trim();
+                    if (et !== 'Driver' && et !== 'Tour Leader / Follower') return;
+                }
                 totalActiveDrivers++;
                 const eid = entryIdColIdxCN >= 0 ? (row[entryIdColIdxCN]||'').trim() : '';
                 if (eid && assignedEntryIds.has(eid)) return; // already assigned
                 // Find category — strict header match first (same as auto-assign), with startsWith trigger for partials
+                // Note: Tour Leader / Follower is NOT skipped here so TL/TF entries show their category
                 let cat = '';
                 for (const config of driverEntryConfig) {
-                    if (config.category === 'Tour Leader / Follower') continue;
                     // Try strict match first (fastest, same as auto-assign), then case-insensitive fallback
                     let hIdx = csvHeaders.findIndex(h => h === config.header1);
                     if (hIdx < 0) hIdx = csvHeaders.findIndex(h => h.trim().toLowerCase() === config.header1.trim().toLowerCase());
