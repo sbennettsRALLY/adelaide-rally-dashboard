@@ -968,6 +968,7 @@
                             <th style="padding:6px 10px; text-align:left;">Entry ID</th>
                             <th style="padding:6px 10px; text-align:left;">Driver Name</th>
                             <th style="padding:6px 10px; text-align:left;">Category</th>
+                            <th style="padding:6px 10px; text-align:left;">Assign Car #</th>
                         </tr></thead>
                         <tbody id="cnReconcileTbody"></tbody>
                     </table>
@@ -4843,6 +4844,23 @@
             showMessage('cnMsg', 'info', 'All car number assignments cleared.');
         }
 
+        function cnAssignFromReconcile(entryId, driverName, selectElemId) {
+            const selectElem = document.getElementById(selectElemId);
+            if (!selectElem) return;
+            const carNum = selectElem.value;
+            if (!carNum) { showMessage('cnMsg', 'error', '❌ Please select a car number first.'); return; }
+            // Remove any existing assignment for this entry
+            Object.keys(carNumberAssignments).forEach(cn => {
+                if (carNumberAssignments[cn] && carNumberAssignments[cn].entryId === entryId) {
+                    delete carNumberAssignments[cn];
+                }
+            });
+            carNumberAssignments[carNum] = {entryId, driverName};
+            saveToStorage();
+            renderCarNumbers();
+            showMessage('cnMsg', 'success', `✓ ${driverName} assigned to car #${carNum}`);
+        }
+
         // ── Render ──────────────────────────────────────────────────────────
         function renderCarNumbers() {
             const catFilter    = (document.getElementById('cnCatFilter')    || {}).value || '';
@@ -4911,11 +4929,11 @@
                 totalActiveDrivers++;
                 const eid = entryIdColIdxCN >= 0 ? (row[entryIdColIdxCN]||'').trim() : '';
                 if (eid && assignedEntryIds.has(eid)) return; // already assigned
-                // Find category
+                // Find category — case-insensitive trimmed header match
                 let cat = '';
                 for (const config of driverEntryConfig) {
                     if (config.category === 'Tour Leader / Follower') continue;
-                    const hIdx = csvHeaders.findIndex(h => h === config.header1);
+                    const hIdx = csvHeaders.findIndex(h => h.trim().toLowerCase() === config.header1.trim().toLowerCase());
                     if (hIdx >= 0 && (row[hIdx]||'').trim() === config.trigger1) { cat = config.category; break; }
                 }
                 const fn = fnIdxCN >= 0 ? (row[fnIdxCN]||'').trim() : '';
@@ -4932,13 +4950,83 @@
                         `${driversWithoutCar.length} active driver${driversWithoutCar.length !== 1 ? 's' : ''} (of ${totalActiveDrivers}) have no car number assigned`;
                     const tb = document.getElementById('cnReconcileTbody');
                     if (tb) {
-                        tb.innerHTML = driversWithoutCar.map((d,i) =>
-                            `<tr style="background:${i%2===0?'#fff':'#FFF8E8'}">
-                                <td style="padding:5px 10px; font-family:monospace;">${d.entryId}</td>
-                                <td style="padding:5px 10px; font-weight:600;">${d.driverName}</td>
-                                <td style="padding:5px 10px; color:#666;">${d.category}</td>
-                            </tr>`
-                        ).join('');
+                        tb.innerHTML = '';
+                        // Build set of already-used slot numbers (excluding withdrawn)
+                        const usedSlots = new Set(
+                            Object.entries(carNumberAssignments)
+                                .filter(([,a]) => a && !withdrawnEntryIds.has(a.entryId))
+                                .map(([cn]) => cn)
+                        );
+                        driversWithoutCar.forEach((d, i) => {
+                            const tr = document.createElement('tr');
+                            tr.style.background = i % 2 === 0 ? '#fff' : '#FFF8E8';
+
+                            const tdEid = document.createElement('td');
+                            tdEid.style.cssText = 'padding:5px 10px; font-family:monospace;';
+                            tdEid.textContent = d.entryId;
+
+                            const tdName = document.createElement('td');
+                            tdName.style.cssText = 'padding:5px 10px; font-weight:600;';
+                            tdName.textContent = d.driverName;
+
+                            const tdCat = document.createElement('td');
+                            tdCat.style.cssText = 'padding:5px 10px; color:#555;';
+                            tdCat.textContent = d.category || '—';
+
+                            const tdAssign = document.createElement('td');
+                            tdAssign.style.cssText = 'padding:5px 10px; white-space:nowrap;';
+
+                            const selId = 'cnRec_' + i;
+                            const sel = document.createElement('select');
+                            sel.id = selId;
+                            sel.style.cssText = 'font-size:11px; padding:3px 5px; border:1px solid #ccc; border-radius:4px; max-width:160px;';
+                            const blankOpt = document.createElement('option');
+                            blankOpt.value = '';
+                            blankOpt.textContent = '— select —';
+                            sel.appendChild(blankOpt);
+
+                            // Group available slots: own category first, then TL/TF, then others
+                            const ownCatMapped = CN_CATEGORY_MAP[d.category] || '';
+                            const ownSlots = [], tlTfSlots = [], otherSlots = [];
+                            CAR_NUMBER_SLOTS.forEach(slot => {
+                                if (usedSlots.has(slot.carNum)) return;
+                                if (ownCatMapped && slot.category === ownCatMapped) ownSlots.push(slot);
+                                else if (slot.role === 'TL' || slot.role === 'TF') tlTfSlots.push(slot);
+                                else otherSlots.push(slot);
+                            });
+
+                            const addGroup = (label, slots) => {
+                                if (!slots.length) return;
+                                const og = document.createElement('optgroup');
+                                og.label = label;
+                                slots.forEach(s => {
+                                    const o = document.createElement('option');
+                                    o.value = s.carNum;
+                                    o.textContent = '#' + s.carNum + (s.role !== 'Entrant' ? ' [' + s.role + ']' : '');
+                                    og.appendChild(o);
+                                });
+                                sel.appendChild(og);
+                            };
+                            if (ownCatMapped) addGroup(ownCatMapped + ' (own)', ownSlots);
+                            addGroup('TL / TF Vehicles', tlTfSlots);
+                            addGroup('Other categories', ownCatMapped ? otherSlots : [...ownSlots, ...otherSlots]);
+
+                            const btn = document.createElement('button');
+                            btn.textContent = '✓ Assign';
+                            btn.style.cssText = 'margin-left:6px; font-size:10px; padding:3px 8px; background:#22c55e; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;';
+                            const capturedSelId = selId;
+                            const capturedEid = d.entryId;
+                            const capturedName = d.driverName;
+                            btn.onclick = function() { cnAssignFromReconcile(capturedEid, capturedName, capturedSelId); };
+
+                            tdAssign.appendChild(sel);
+                            tdAssign.appendChild(btn);
+                            tr.appendChild(tdEid);
+                            tr.appendChild(tdName);
+                            tr.appendChild(tdCat);
+                            tr.appendChild(tdAssign);
+                            tb.appendChild(tr);
+                        });
                     }
                 }
                 if (reconcileOk) reconcileOk.style.display = 'none';
