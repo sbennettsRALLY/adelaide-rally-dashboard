@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v2.8 - DocuSign scan namespace fix 2026-06-22 -->
+<!-- Adelaide Rally 2026 Dashboard v2.9 - Driver-only filter for entry counts 2026-07-03 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1413,7 +1413,11 @@
                 const headerIdx = csvHeaders.findIndex(h => h === config.header1);
                 let entries = 0;
                 if (headerIdx >= 0) {
-                    entries = csvData.filter(row => row[headerIdx] === config.trigger1).length;
+                    // Only count rows where Main Entry Type = 'Driver' (not Navigators)
+                    entries = csvData.filter(row =>
+                        row[headerIdx] === config.trigger1 &&
+                        (row[entryTypeIdx] || '').trim() === 'Driver'
+                    ).length;
                 }
                 totalEntries += entries;
                 totalCapacity += config.capacity;
@@ -1479,12 +1483,16 @@
             entrySalesBody.innerHTML = '';
 
             // Calculate entries per category and group branded tours
+            // Only count Driver rows so income reflects actual vehicle entries (not navigators)
             const categorySales = {};
             driverEntryConfig.forEach(config => {
                 const headerIdx = csvHeaders.findIndex(h => h === config.header1);
                 let entries = 0;
                 if (headerIdx >= 0) {
-                    entries = csvData.filter(row => row[headerIdx] === config.trigger1).length;
+                    entries = csvData.filter(row =>
+                        row[headerIdx] === config.trigger1 &&
+                        (row[entryTypeIdx] || '').trim() === 'Driver'
+                    ).length;
                 }
 
                 // Find entry fee for this category
