@@ -1403,6 +1403,10 @@
         function updateDashboardTables() {
             if (csvData.length === 0) return;
 
+            // Derive entry type column index locally so it works on page load from stored state
+            // (the global entryTypeIdx is only set during a fresh CSV upload)
+            const localEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+
             // Update driver entries
             let totalEntries = 0;
             let totalCapacity = 0;
@@ -1416,7 +1420,7 @@
                     // Only count rows where Main Entry Type = 'Driver' (not Navigators)
                     entries = csvData.filter(row =>
                         row[headerIdx] === config.trigger1 &&
-                        (row[entryTypeIdx] || '').trim() === 'Driver'
+                        (localEntryTypeIdx >= 0 ? (row[localEntryTypeIdx] || '').trim() === 'Driver' : true)
                     ).length;
                 }
                 totalEntries += entries;
@@ -1491,7 +1495,7 @@
                 if (headerIdx >= 0) {
                     entries = csvData.filter(row =>
                         row[headerIdx] === config.trigger1 &&
-                        (row[entryTypeIdx] || '').trim() === 'Driver'
+                        (localEntryTypeIdx >= 0 ? (row[localEntryTypeIdx] || '').trim() === 'Driver' : true)
                     ).length;
                 }
 
