@@ -4099,7 +4099,37 @@
                 });
                 const withdrawnWs = XLSX.utils.aoa_to_sheet(withdrawnData);
                 XLSX.utils.book_append_sheet(wb, withdrawnWs, 'Withdrawals');
-                // ===== SHEET 6: Raw Data (Last) =====
+                // ===== SHEET 6: Car Numbers =====
+                // Build a set of withdrawn entry IDs for status lookup
+                const exportWithdrawnEntryIds = new Set();
+                Array.from(withdrawn).forEach(idx => {
+                    if (idx < csvData.length && entryIdIdx >= 0) {
+                        const eid = (csvData[idx][entryIdIdx] || '').toString().trim();
+                        if (eid) exportWithdrawnEntryIds.add(eid);
+                    }
+                });
+                const cnExportSlots = getEffectiveSlots();
+                const cnExportData = [['Car #', 'Category', 'Role', 'Entry ID', 'Driver Name', 'Status']];
+                cnExportSlots.forEach(slot => {
+                    const assignment = carNumberAssignments[slot.carNum];
+                    const entryId   = assignment ? (assignment.entryId || '') : '';
+                    const driverName = assignment ? (assignment.driverName || '') : '';
+                    let status = 'Unassigned';
+                    if (assignment && entryId) {
+                        status = exportWithdrawnEntryIds.has(entryId) ? 'Withdrawn' : 'Assigned';
+                    }
+                    cnExportData.push([
+                        slot.carNum,
+                        slot.category,
+                        slot.role || 'Entrant',
+                        entryId,
+                        driverName,
+                        status
+                    ]);
+                });
+                const cnExportWs = XLSX.utils.aoa_to_sheet(cnExportData);
+                XLSX.utils.book_append_sheet(wb, cnExportWs, 'Car Numbers');
+                // ===== SHEET 7: Raw Data (Last) =====
 
                 const rawDataRows = [csvHeaders, ...csvData];
                 const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
@@ -4776,23 +4806,23 @@
         // Returns CAR_NUMBER_SLOTS merged with any user-added custom slots
         function getEffectiveSlots() {
             if (!customCarSlots || customCarSlots.length === 0) return CAR_NUMBER_SLOTS;
-            const insertMap = {};
-            const appendList = [];
+            // Build result by inserting custom slots one-by-one in order.
+            // This handles custom-after-custom: when slot #917 says insertAfter=#916,
+            // #916 is already in the result (added in a prior iteration), so findIndex works.
+            const result = [...CAR_NUMBER_SLOTS];
             customCarSlots.forEach(cs => {
                 const entry = {carNum: cs.carNum, category: cs.category, role: cs.role, custom: true};
                 if (cs.insertAfter) {
-                    if (!insertMap[cs.insertAfter]) insertMap[cs.insertAfter] = [];
-                    insertMap[cs.insertAfter].push(entry);
+                    const idx = result.findIndex(s => s.carNum === cs.insertAfter);
+                    if (idx >= 0) {
+                        result.splice(idx + 1, 0, entry);
+                    } else {
+                        result.push(entry); // insertAfter target not found — append
+                    }
                 } else {
-                    appendList.push(entry);
+                    result.push(entry);
                 }
             });
-            const result = [];
-            CAR_NUMBER_SLOTS.forEach(slot => {
-                result.push(slot);
-                if (insertMap[slot.carNum]) insertMap[slot.carNum].forEach(e => result.push(e));
-            });
-            appendList.forEach(e => result.push(e));
             return result;
         }
 
