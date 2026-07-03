@@ -903,6 +903,8 @@
                     </div>
                 </div>
             </div>
+            <!-- Potential Duplicates Section -->
+            <div id="duplicatesSection" style="display:none; margin-top:28px;"></div>
         </div>
 
         <!-- ══ CAR NUMBERS PAGE ══════════════════════════════════════════════ -->
@@ -3785,6 +3787,97 @@
             document.getElementById('withdrawnCount').textContent = withdrawnCount;
             document.getElementById('withdrawnNoData').style.display = withdrawnCount === 0 ? 'block' : 'none';
             document.getElementById('withdrawnTable').style.display = withdrawnCount === 0 ? 'none' : 'table';
+
+            // ── Potential Duplicate Detection ─────────────────────────────────
+            const dupDiv = document.getElementById('duplicatesSection');
+            const phoneIdxDup = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+            const entryTypeIdxDup = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+
+            // Collect all ACTIVE entries with normalised keys for comparison
+            const activePool = [];
+            csvData.forEach((row, idx) => {
+                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                if (withdrawn.has(entryId)) return;
+                const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
+                const lastName  = lastNameIdx  >= 0 ? row[lastNameIdx]  || '' : '';
+                const phone     = phoneIdxDup  >= 0 ? row[phoneIdxDup]  || '' : '';
+                const entryType = entryTypeIdxDup >= 0 ? row[entryTypeIdxDup] || '' : '';
+                const fullName  = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
+                const category  = getCategory(row, categoryIdxs);
+                // Normalise for comparison
+                const normName  = fullName.toLowerCase().replace(/\s+/g, ' ').trim();
+                const normPhone = phone.replace(/\D/g, ''); // digits only
+                activePool.push({ entryId, fullName, normName, phone, normPhone, category, entryType });
+            });
+
+            // Group by name, then by phone
+            const nameMap  = {};
+            const phoneMap = {};
+            activePool.forEach(e => {
+                if (e.normName)  { (nameMap[e.normName]   = nameMap[e.normName]   || []).push(e); }
+                if (e.normPhone && e.normPhone.length >= 6) {
+                    (phoneMap[e.normPhone] = phoneMap[e.normPhone] || []).push(e);
+                }
+            });
+
+            // Build deduplicated list of groups (same set of entryIds only appears once)
+            const dupGroups = [];
+            const seenKeys  = new Set();
+            const addGroup  = (reason, label, entries) => {
+                if (entries.length < 2) return;
+                const key = entries.map(e => e.entryId).sort().join('|');
+                if (seenKeys.has(key)) return;
+                seenKeys.add(key);
+                dupGroups.push({ reason, label, entries });
+            };
+            Object.entries(nameMap).forEach(([name, entries]) => addGroup('Same name', entries[0].fullName, entries));
+            Object.entries(phoneMap).forEach(([phone, entries]) => addGroup('Same phone number', entries[0].phone, entries));
+
+            if (dupGroups.length === 0) {
+                dupDiv.style.display = 'none';
+                dupDiv.innerHTML = '';
+            } else {
+                dupDiv.style.display = 'block';
+                let html = `
+                    <div class="sec-title" style="color:#B45309;">⚠ Potential Duplicate Entries</div>
+                    <p style="font-size:12px; color:#78716C; margin:4px 0 16px;">
+                        ${dupGroups.length} group${dupGroups.length > 1 ? 's' : ''} of active entries share the same name or phone number.
+                        Review and withdraw duplicates as needed.
+                    </p>`;
+                dupGroups.forEach(group => {
+                    html += `
+                        <div style="margin-bottom:16px; border:1px solid #FCD34D; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                            <div style="background:#FEF3C7; padding:8px 14px; font-size:12px; font-weight:700; color:#92400E; display:flex; align-items:center; gap:8px;">
+                                <span style="background:#F59E0B; color:#fff; border-radius:4px; padding:2px 7px; font-size:11px;">${group.reason}</span>
+                                <span style="font-style:italic; font-weight:400;">${group.label}</span>
+                                <span style="margin-left:auto; font-weight:400; color:#A16207;">${group.entries.length} entries</span>
+                            </div>
+                            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                                <thead>
+                                    <tr style="background:#FFFBEB;">
+                                        <th style="text-align:left; padding:6px 12px; color:#78716C; font-weight:600; border-bottom:1px solid #FDE68A;">Entry #</th>
+                                        <th style="text-align:left; padding:6px 12px; color:#78716C; font-weight:600; border-bottom:1px solid #FDE68A;">Name</th>
+                                        <th style="text-align:left; padding:6px 12px; color:#78716C; font-weight:600; border-bottom:1px solid #FDE68A;">Phone</th>
+                                        <th style="text-align:left; padding:6px 12px; color:#78716C; font-weight:600; border-bottom:1px solid #FDE68A;">Entry Type</th>
+                                        <th style="text-align:left; padding:6px 12px; color:#78716C; font-weight:600; border-bottom:1px solid #FDE68A;">Category</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                    group.entries.forEach((e, i) => {
+                        const bg = i % 2 === 0 ? '#FFFBEB' : '#FEFCE8';
+                        html += `
+                                    <tr style="background:${bg}; border-top:1px solid #FDE68A;">
+                                        <td style="padding:7px 12px; font-weight:600;">${e.entryId}</td>
+                                        <td style="padding:7px 12px;">${e.fullName}</td>
+                                        <td style="padding:7px 12px;">${e.phone}</td>
+                                        <td style="padding:7px 12px; font-size:11px;">${e.entryType}</td>
+                                        <td style="padding:7px 12px; font-size:11px;">${e.category}</td>
+                                    </tr>`;
+                    });
+                    html += `</tbody></table></div>`;
+                });
+                dupDiv.innerHTML = html;
+            }
         }
         function withdrawEntrant(idx) {
             if (confirm(`Are you sure you want to withdraw this entrant?`)) {
