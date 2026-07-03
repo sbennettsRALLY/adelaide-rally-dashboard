@@ -1072,6 +1072,7 @@
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
+        let manualNavMatches = []; // [{driverEntryId, navigatorEntryId}] — manually confirmed nav pairs
         let currentView = 'dashboard';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
         let filterOutstandingPayment = false; // Filter for outstanding payments
@@ -2294,7 +2295,7 @@
             // Render confirmed pairs table
             const pairsHeadRow = document.getElementById('navPairsHead');
             pairsHeadRow.innerHTML = '';
-            ['Driver Entry #', 'Driver Name', 'Driver Phone', 'Driver Category', 'Navigator Entry #', 'Navigator Name', 'Navigator Phone', 'Navigator Category', 'Status'].forEach(h => {
+            ['Driver Entry #', 'Driver Name', 'Driver Phone', 'Driver Category', 'Navigator Entry #', 'Navigator Name', 'Navigator Phone', 'Navigator Category', 'Status', 'Action'].forEach(h => {
                 const th = document.createElement('th');
                 th.textContent = h;
                 pairsHeadRow.appendChild(th);
@@ -2324,9 +2325,48 @@
                     td.textContent = text;
                     tr.appendChild(td);
                 });
+                // Empty action cell for auto-detected pairs
+                tr.appendChild(document.createElement('td'));
                 pairsBodyRow.appendChild(tr);
             });
-            if (pairs.length === 0) {
+            // Render manually confirmed pairs
+            manualNavMatches.forEach(m => {
+                const mDriver = drivers.find(d => d.entryId === m.driverEntryId);
+                const mNav = navigators.find(n => n.entryId === m.navigatorEntryId);
+                if (!mDriver || !mNav) return; // stale entry (CSV changed), skip
+                const searchText = [mDriver.entryId, mDriver.name, mDriver.phone, mDriver.category, mNav.entryId, mNav.name, mNav.phone, mNav.category].join(' ').toLowerCase();
+                if (!searchText.includes(searchTerm)) return;
+                const tr = document.createElement('tr');
+                tr.style.background = '#F0FDF4';
+                [
+                    mDriver.entryId,
+                    mDriver.name,
+                    mDriver.phone,
+                    mDriver.category,
+                    mNav.entryId,
+                    mNav.name,
+                    mNav.phone,
+                    mNav.category,
+                    '⚑ Manual match'
+                ].forEach(text => {
+                    const td = document.createElement('td');
+                    td.textContent = text;
+                    tr.appendChild(td);
+                });
+                // Unmatch button
+                const actionTd = document.createElement('td');
+                const unmatchBtn = document.createElement('button');
+                unmatchBtn.textContent = '✕ Unmatch';
+                unmatchBtn.title = `Remove manual pairing between ${mDriver.name} and ${mNav.name}`;
+                unmatchBtn.style.cssText = 'background:#DC2626;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;';
+                const dEid = m.driverEntryId;
+                const nEid = m.navigatorEntryId;
+                unmatchBtn.onclick = () => navManualUnmatch(dEid, nEid);
+                actionTd.appendChild(unmatchBtn);
+                tr.appendChild(actionTd);
+                pairsBodyRow.appendChild(tr);
+            });
+            if (pairs.length === 0 && manualNavMatches.length === 0) {
                 document.getElementById('navPairsNoData').style.display = 'block';
                 document.getElementById('navPairsTable').style.display = 'none';
             } else {
@@ -2373,13 +2413,20 @@
                 }
             });
 
+            // Add manually matched indices to matchedIndices so they disappear from unmatched section
+            manualNavMatches.forEach(m => {
+                const mDriver = drivers.find(d => d.entryId === m.driverEntryId);
+                const mNav = navigators.find(n => n.entryId === m.navigatorEntryId);
+                if (mDriver) matchedIndices.add(mDriver.idx);
+                if (mNav) matchedIndices.add(mNav.idx);
+            });
             // Filter unmatched to exclude those already matched
             const filteredUnmatchedDrivers = unmatchedDrivers.filter(driver => !matchedIndices.has(driver.idx));
             const filteredUnmatchedNavigators = unmatchedNavigators.filter(nav => !matchedIndices.has(nav.idx));
 
             const unmatchedHeadRow = document.getElementById('navUnmatchedHead');
             unmatchedHeadRow.innerHTML = '';
-            ['Type', 'Entry #', 'Name', 'Phone', 'Email', 'Nominated Name', 'Nominated Phone', 'Nominated Email', 'Status'].forEach(h => {
+            ['Type', 'Entry #', 'Name', 'Phone', 'Email', 'Nominated Name', 'Nominated Phone', 'Nominated Email', 'Status', 'Action'].forEach(h => {
                 const th = document.createElement('th');
                 th.textContent = h;
                 unmatchedHeadRow.appendChild(th);
@@ -2395,6 +2442,7 @@
                 let nomPhone = '';
                 let nomEmail = '';
                 let status = 'No nomination';
+                let matchNavForBtn = null; // navigator to use for Match button (one-way only)
                 if (driver.nominatedName || driver.nominatedPhone) {
                     // Driver nominated someone
                     let matchedNav = null;
@@ -2410,6 +2458,7 @@
                         // Check if they nominated this driver back (mutual match)
                         const mutualMatch = matchedNav.nominatedPhone && matchedNav.nominatedPhone.trim() === driver.phone.trim();
                         status = mutualMatch ? 'Mutual match' : 'One-way nomination';
+                        if (!mutualMatch) matchNavForBtn = matchedNav;
                     } else {
                         // Navigator NOT found in system - show nominated details from driver
                         nomName = driver.nominatedName || 'Name not provided';
@@ -2434,6 +2483,19 @@
                     td.textContent = text;
                     tr.appendChild(td);
                 });
+                // Action cell — Match button for one-way nominations
+                const actionTd = document.createElement('td');
+                if (matchNavForBtn) {
+                    const btn = document.createElement('button');
+                    btn.textContent = '✓ Match';
+                    btn.title = `Manually pair ${driver.name} with ${matchNavForBtn.name}`;
+                    btn.style.cssText = 'background:#16A34A;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;font-weight:600;';
+                    const dEid = driver.entryId;
+                    const nEid = matchNavForBtn.entryId;
+                    btn.onclick = () => navManualMatch(dEid, nEid);
+                    actionTd.appendChild(btn);
+                }
+                tr.appendChild(actionTd);
                 unmatchedBodyRow.appendChild(tr);
             });
             // Add unmatched navigators (excluding those already matched)
@@ -2445,6 +2507,7 @@
                 let nomPhone = '';
                 let nomEmail = '';
                 let status = 'No nomination';
+                let matchDrvForBtn = null; // driver to use for Match button (one-way only)
                 if (navigator.nominatedName || navigator.nominatedPhone) {
                     // Navigator nominated someone
                     let matchedDriver = null;
@@ -2460,6 +2523,7 @@
                         // Check if they nominated this navigator back (mutual match)
                         const mutualMatch = matchedDriver.nominatedPhone && matchedDriver.nominatedPhone.trim() === navigator.phone.trim();
                         status = mutualMatch ? 'Mutual match' : 'One-way nomination';
+                        if (!mutualMatch) matchDrvForBtn = matchedDriver;
                     } else {
                         // Driver NOT found in system - show nominated details from navigator
                         nomName = navigator.nominatedName || 'Name not provided';
@@ -2484,6 +2548,19 @@
                     td.textContent = text;
                     tr.appendChild(td);
                 });
+                // Action cell — Match button for one-way nominations
+                const actionTd = document.createElement('td');
+                if (matchDrvForBtn) {
+                    const btn = document.createElement('button');
+                    btn.textContent = '✓ Match';
+                    btn.title = `Manually pair ${matchDrvForBtn.name} with ${navigator.name}`;
+                    btn.style.cssText = 'background:#16A34A;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;font-weight:600;';
+                    const dEid = matchDrvForBtn.entryId;
+                    const nEid = navigator.entryId;
+                    btn.onclick = () => navManualMatch(dEid, nEid);
+                    actionTd.appendChild(btn);
+                }
+                tr.appendChild(actionTd);
                 unmatchedBodyRow.appendChild(tr);
             });
             // Hide unmatched section by default (will be shown via button click)
@@ -2590,11 +2667,30 @@
                 document.getElementById('navAdditionalTable').style.display = 'none';
             }
             // Update statistics
+            const validManualCount = manualNavMatches.filter(m =>
+                drivers.some(d => d.entryId === m.driverEntryId) &&
+                navigators.some(n => n.entryId === m.navigatorEntryId)
+            ).length;
             document.getElementById('navTotalDrivers').textContent = drivers.length;
             document.getElementById('navTotalNavigators').textContent = navigators.length;
-            document.getElementById('navConfirmedPairs').textContent = pairs.filter(p => p.confirmed).length;
+            document.getElementById('navConfirmedPairs').textContent = pairs.filter(p => p.confirmed).length + validManualCount;
             document.getElementById('navUnmatchedCount').textContent = filteredUnmatchedDrivers.length + filteredUnmatchedNavigators.length;
         }
+        function navManualMatch(driverEntryId, navigatorEntryId) {
+            // Prevent duplicates
+            const already = manualNavMatches.some(m => m.driverEntryId === driverEntryId && m.navigatorEntryId === navigatorEntryId);
+            if (already) return;
+            manualNavMatches.push({ driverEntryId, navigatorEntryId });
+            saveToStorage();
+            renderNavMarry();
+        }
+
+        function navManualUnmatch(driverEntryId, navigatorEntryId) {
+            manualNavMatches = manualNavMatches.filter(m => !(m.driverEntryId === driverEntryId && m.navigatorEntryId === navigatorEntryId));
+            saveToStorage();
+            renderNavMarry();
+        }
+
         function renderMALicenceTable() {
             if (csvData.length === 0) {
                 document.getElementById('maNoData').style.display = 'block';
@@ -2946,6 +3042,7 @@
                 withdrawn: Array.from(withdrawn),
                 carNumberAssignments,
                 customCarSlots,
+                manualNavMatches,
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
@@ -2968,6 +3065,7 @@
                     withdrawn = new Set(data.withdrawn || []);
                     carNumberAssignments = data.carNumberAssignments || {};
                     customCarSlots = data.customCarSlots || [];
+                    manualNavMatches = data.manualNavMatches || [];
                     // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
                     lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
@@ -4079,6 +4177,23 @@
                         pair.navigator.phone,
                         pair.navigator.category,
                         pair.confirmed ? 'Confirmed' : 'One-way'
+                    ]);
+                });
+                // Add manually confirmed pairs
+                manualNavMatches.forEach(m => {
+                    const mDriver = drivers.find(d => d.entryId === m.driverEntryId);
+                    const mNav = navigators.find(n => n.entryId === m.navigatorEntryId);
+                    if (!mDriver || !mNav) return;
+                    navMarryData.push([
+                        mDriver.entryId,
+                        mDriver.name,
+                        mDriver.phone,
+                        mDriver.category,
+                        mNav.entryId,
+                        mNav.name,
+                        mNav.phone,
+                        mNav.category,
+                        'Manual match'
                     ]);
                 });
                 const navMarryWs = XLSX.utils.aoa_to_sheet(navMarryData);
