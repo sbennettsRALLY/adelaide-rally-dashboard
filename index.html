@@ -4708,13 +4708,26 @@
             const fnIdx             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
             const lnIdx             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
 
+            // Build set of withdrawn entry IDs to exclude
+            const withdrawnIds = new Set();
+            if (entryIdColIdx >= 0) {
+                csvData.forEach((row, rowIdx) => {
+                    if (withdrawn.has(rowIdx)) {
+                        const eid = (row[entryIdColIdx] || '').trim();
+                        if (eid) withdrawnIds.add(eid);
+                    }
+                });
+            }
+
             // Build per-slot-category list of unassigned drivers (in CSV order)
             const alreadyAssignedIds = new Set(
                 Object.values(carNumberAssignments).map(a => a && a.entryId).filter(Boolean)
             );
             const byCat = {}; // slotCategory → [{entryId, driverName}, ...]
 
-            csvData.forEach(row => {
+            csvData.forEach((row, rowIdx) => {
+                // Skip withdrawn entrants
+                if (withdrawn.has(rowIdx)) return;
                 // Only Driver main entry types
                 if (localEntryTypeIdx >= 0 && (row[localEntryTypeIdx]||'').trim() !== 'Driver') return;
 
@@ -4818,25 +4831,40 @@
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            // Stats
-            let totalSlots = 0, assignedSlots = 0;
+            // Build set of withdrawn entry IDs so we can flag them in the table
+            const localEntryIdIdxR = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const withdrawnEntryIds = new Set();
+            if (localEntryIdIdxR >= 0) {
+                csvData.forEach((row, rowIdx) => {
+                    if (withdrawn.has(rowIdx)) {
+                        const eid = (row[localEntryIdIdxR] || '').trim();
+                        if (eid) withdrawnEntryIds.add(eid);
+                    }
+                });
+            }
+
+            // Stats — count across ALL 508 car number slots
+            let totalAll = CAR_NUMBER_SLOTS.length;
+            let assignedAll = 0;
             CAR_NUMBER_SLOTS.forEach(s => {
-                if (s.role === 'Entrant') {
-                    totalSlots++;
-                    if (carNumberAssignments[s.carNum]) assignedSlots++;
-                }
+                const asg = carNumberAssignments[s.carNum];
+                if (asg && !withdrawnEntryIds.has(asg.entryId)) assignedAll++;
             });
-            const tlTotal      = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Leader').length;
-            const tfTotal      = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Follower').length;
-            const tlUnassigned = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Leader'   && !carNumberAssignments[s.carNum]).length;
-            const tfUnassigned = CAR_NUMBER_SLOTS.filter(s => s.role === 'Tour Follower' && !carNumberAssignments[s.carNum]).length;
+            const tlUnassigned = CAR_NUMBER_SLOTS.filter(s => {
+                const asg = carNumberAssignments[s.carNum];
+                return s.role === 'Tour Leader' && (!asg || withdrawnEntryIds.has(asg.entryId));
+            }).length;
+            const tfUnassigned = CAR_NUMBER_SLOTS.filter(s => {
+                const asg = carNumberAssignments[s.carNum];
+                return s.role === 'Tour Follower' && (!asg || withdrawnEntryIds.has(asg.entryId));
+            }).length;
 
             const statsBar = document.getElementById('cnStatsBar');
             if (statsBar) {
                 statsBar.innerHTML = `
-                    <div class="cn-stat"><div class="cn-stat-num">${assignedSlots}</div><div class="cn-stat-lbl">Entrants Assigned</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots - assignedSlots}</div><div class="cn-stat-lbl">Entrants Unassigned</div></div>
-                    <div class="cn-stat"><div class="cn-stat-num">${totalSlots}</div><div class="cn-stat-lbl">Total Entrant Slots</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${assignedAll}</div><div class="cn-stat-lbl">Assigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${totalAll - assignedAll}</div><div class="cn-stat-lbl">Unassigned</div></div>
+                    <div class="cn-stat"><div class="cn-stat-num">${totalAll}</div><div class="cn-stat-lbl">Total Car Numbers</div></div>
                     <div class="cn-stat" style="border-top-color:#1B3A6B;"><div class="cn-stat-num" style="color:#1B3A6B;">${tlUnassigned}</div><div class="cn-stat-lbl">TL Unassigned</div></div>
                     <div class="cn-stat" style="border-top-color:#3A3A3A;"><div class="cn-stat-num" style="color:#3A3A3A;">${tfUnassigned}</div><div class="cn-stat-lbl">TF Unassigned</div></div>
                 `;
@@ -4847,7 +4875,10 @@
             let visibleCount = 0;
 
             CAR_NUMBER_SLOTS.forEach((slot, idx) => {
-                const asg = carNumberAssignments[slot.carNum] || null;
+                const asgRaw = carNumberAssignments[slot.carNum] || null;
+                // Treat withdrawn entrants as unassigned in the display
+                const isWithdrawn = asgRaw && withdrawnEntryIds.has(asgRaw.entryId);
+                const asg = isWithdrawn ? null : asgRaw;
                 const isAssigned = !!asg;
 
                 // Apply filters
@@ -4883,7 +4914,6 @@
                     if (isTarget) tr.classList.add('cn-row-swap-target');
                 }
 
-                // Role badge
                 // Swap button
                 let btnClass, btnLabel;
                 if (isSource) {
@@ -4895,7 +4925,11 @@
                 }
 
                 const entryIdDisplay = asg ? `<span class="cn-entry-id">${asg.entryId}</span>` : '';
-                const driverDisplay  = asg ? asg.driverName : `<span class="cn-unassigned">— unassigned —</span>`;
+                const driverDisplay  = asg
+                    ? asg.driverName
+                    : (isWithdrawn
+                        ? `<span class="cn-unassigned" title="Withdrawn: ${asgRaw.driverName}">— withdrawn —</span>`
+                        : `<span class="cn-unassigned">— unassigned —</span>`);
 
                 tr.innerHTML = `
                     <td>${entryIdDisplay}</td>
