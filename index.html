@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.2 - Mercedes-Benz fix + car number reconciliation 2026-07-03 -->
+<!-- Adelaide Rally 2026 Dashboard v3.13 - Fix withdrawn entrants appearing in car numbering tab 2026-07-07 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1266,7 +1266,7 @@
                     photoIdVerified = data.photoIdVerified || {};
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
-                    withdrawn = new Set(data.withdrawn || []);
+                    withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                     if (csvData.length > 0) {
                         document.getElementById('navBar').style.display = 'flex';
                         console.log('✓ Loaded embedded data with ' + csvData.length + ' entries');
@@ -3066,7 +3066,7 @@
                     photoIdVerified = data.photoIdVerified || {};
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
-                    withdrawn = new Set(data.withdrawn || []);
+                    withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                     carNumberAssignments = data.carNumberAssignments || {};
                     customCarSlots = data.customCarSlots || [];
                     manualNavMatches = data.manualNavMatches || [];
@@ -3544,7 +3544,7 @@
                 photoIdVerified = data.photoIdVerified || {};
                 disclaimerChecked = data.disclaimerChecked || {};
                 disclaimerLocked = data.disclaimerLocked || {};
-                withdrawn = new Set(data.withdrawn || []);
+                withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                 lastSyncTimestamp = data.timestamp || 0;
                 console.log('✓ Loaded state from Dropbox');
                 if (csvData.length > 0) {
@@ -3805,13 +3805,18 @@
             document.getElementById('withdrawnTable').style.display = withdrawnCount === 0 ? 'none' : 'table';
 
             // ── Potential Duplicate Detection ─────────────────────────────────
-            // activePool was already built during the active entrants loop above
+            // Secondary safety filter: belt-and-suspenders to ensure no withdrawn
+            // entries appear in the pool regardless of type-coercion edge cases.
+            const dupPool = activePool.filter(function(e) {
+                if (!e.entryId) return false;
+                return !withdrawn.has(e.entryId) && !withdrawn.has(String(e.entryId));
+            });
             const dupDiv = document.getElementById('duplicatesSection');
 
             // Group by name, then by phone
             const nameMap  = {};
             const phoneMap = {};
-            activePool.forEach(e => {
+            dupPool.forEach(e => {
                 if (e.normName)  { (nameMap[e.normName]   = nameMap[e.normName]   || []).push(e); }
                 if (e.normPhone && e.normPhone.length >= 6) {
                     (phoneMap[e.normPhone] = phoneMap[e.normPhone] || []).push(e);
@@ -3873,7 +3878,7 @@
                 const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
                 const entryId = entryIdIdx >= 0 ? csvData[idx][entryIdIdx] : '';
                 if (entryId) {
-                    withdrawn.add(entryId);
+                    withdrawn.add(String(entryId));
                     saveToStorage();
                     renderWithdrawalTab();
                     // Update all other views to reflect the withdrawal
@@ -5059,16 +5064,8 @@
             const fnIdx             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
             const lnIdx             = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
 
-            // Build set of withdrawn entry IDs to exclude
-            const withdrawnIds = new Set();
-            if (entryIdColIdx >= 0) {
-                csvData.forEach((row, rowIdx) => {
-                    if (withdrawn.has(rowIdx)) {
-                        const eid = (row[entryIdColIdx] || '').trim();
-                        if (eid) withdrawnIds.add(eid);
-                    }
-                });
-            }
+            // withdrawn already stores entry ID strings — use directly
+            const withdrawnIds = withdrawn;
 
             // Build per-slot-category list of unassigned drivers (in CSV order)
             const alreadyAssignedIds = new Set(
@@ -5078,7 +5075,8 @@
 
             csvData.forEach((row, rowIdx) => {
                 // Skip withdrawn entrants
-                if (withdrawn.has(rowIdx)) return;
+                const eidForWithdrawCheck = entryIdColIdx >= 0 ? (row[entryIdColIdx] || '').trim() : '';
+                if (eidForWithdrawCheck && withdrawn.has(eidForWithdrawCheck)) return;
                 // Only Driver main entry types
                 if (localEntryTypeIdx >= 0 && (row[localEntryTypeIdx]||'').trim() !== 'Driver') return;
 
@@ -5264,19 +5262,11 @@
             if (!tbody) return;
             tbody.innerHTML = '';
 
-            // Build set of withdrawn entry IDs so we can flag them in the table
-            // Also updates the global cnWithdrawnEntryIds so Insert panel functions can use it
-            const localEntryIdIdxR = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-            const withdrawnEntryIds = new Set();
-            if (localEntryIdIdxR >= 0) {
-                csvData.forEach((row, rowIdx) => {
-                    if (withdrawn.has(rowIdx)) {
-                        const eid = (row[localEntryIdIdxR] || '').trim();
-                        if (eid) withdrawnEntryIds.add(eid);
-                    }
-                });
-            }
-            cnWithdrawnEntryIds = withdrawnEntryIds; // sync global
+            // withdrawn already stores entry ID strings — use it directly.
+            // withdrawnEntryIds is kept as an alias so the rest of this function
+            // (and the global cnWithdrawnEntryIds used by Insert panel) still works.
+            const withdrawnEntryIds = withdrawn;
+            cnWithdrawnEntryIds = withdrawn; // sync global
 
             // Stats — count across all car number slots (base + custom)
             const effectiveSlots = getEffectiveSlots();
@@ -5318,7 +5308,8 @@
             const driversWithoutCar = [];
             let totalActiveDrivers = 0;
             csvData.forEach((row, rowIdx) => {
-                if (withdrawn.has(rowIdx)) return;
+                const eidCheck = entryIdColIdxCN >= 0 ? (row[entryIdColIdxCN] || '').trim() : '';
+                if (eidCheck && withdrawn.has(eidCheck)) return;
                 if (localEntryTypeIdxCN >= 0) {
                     const et = (row[localEntryTypeIdxCN]||'').trim();
                     if (et !== 'Driver' && et !== 'Tour Leader / Follower') return;
