@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.18 - Disclaimer check uses list_folder by entry number not search_v2 by filename 2026-07-08 -->
+<!-- Adelaide Rally 2026 Dashboard v3.19 - Disclaimer list_folder uses full path without namespace header 2026-07-08 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1126,8 +1126,10 @@
                     return;
                 }
 
+                // Full absolute path — no namespace header needed.
+                // list_folder uses direct path navigation (like syncToDropbox/syncFromDropbox),
+                // so the full path works without Dropbox-API-Path-Root.
                 const ENTRANTS_PATH = '/Massive Events Corp Folders/Adelaide Rally 2026/02. Entrants';
-                const DROPBOX_ENTRANTS_NS = '2528498259';
                 const verifiedEntryIds = new Set();
                 let cursor = null;
                 let hasMore = true;
@@ -1143,8 +1145,7 @@
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + token,
-                                'Content-Type': 'application/json',
-                                'Dropbox-API-Path-Root': JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_ENTRANTS_NS})
+                                'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({
                                 path: ENTRANTS_PATH,
@@ -1157,8 +1158,7 @@
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + token,
-                                'Content-Type': 'application/json',
-                                'Dropbox-API-Path-Root': JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_ENTRANTS_NS})
+                                'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({ cursor })
                         });
