@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.17 - Disclaimer check uses parent folder entry number not filename 2026-07-08 -->
+<!-- Adelaide Rally 2026 Dashboard v3.18 - Disclaimer check uses list_folder by entry number not search_v2 by filename 2026-07-08 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1107,15 +1107,19 @@
         }
         // DocuSign Verification via Dropbox PDF Scan (v2.6)
         // Scans the entrants folder in Dropbox for "AR26 Disclaimers.pdf" files.
-        // Any entry with a PDF in their folder is treated as DocuSign-signed.
-        // This is more reliable than the Google Sheets chain (catches same-day completions immediately).
+        // Uses list_folder (recursive) rather than search_v2 so the ENTRY NUMBER drives the lookup:
+        //   1. Lists every file inside /02. Entrants/** in one paginated call.
+        //   2. For each file whose name contains "AR26 Disclaimers", reads the PARENT FOLDER name
+        //      and extracts the leading digits as the entry number.
+        // The folder is always named "554 [Whatever Name]" — only the leading number matters.
+        // This is immune to name mismatches between Dropbox and the CSV.
         async function syncVerificationFromDropbox() {
             if (!dropboxSyncEnabled) {
                 showMessage('docMsg', 'error', '❌ Dropbox not connected. Please connect to Dropbox first.');
                 return;
             }
             try {
-                showMessage('docMsg', 'info', '🔄 Scanning Dropbox for signed DocuSign PDFs...');
+                showMessage('docMsg', 'info', '🔄 Scanning Dropbox entrant folders for signed disclaimers...');
                 const token = await getValidDropboxToken();
                 if (!token) {
                     showMessage('docMsg', 'error', '❌ No Dropbox token available. Please reconnect.');
@@ -1123,18 +1127,19 @@
                 }
 
                 const ENTRANTS_PATH = '/Massive Events Corp Folders/Adelaide Rally 2026/02. Entrants';
+                const DROPBOX_ENTRANTS_NS = '2528498259';
                 const verifiedEntryIds = new Set();
                 let cursor = null;
                 let hasMore = true;
+                let pageCount = 0;
 
-                // Search for all AR26 Disclaimers PDFs within the Massive Events Corp Folders namespace.
-                // Must use Dropbox-API-Path-Root header (ns:2528498259) — without it, search_v2 only
-                // searches the home namespace and returns 0 results for team folder files.
-                const DROPBOX_ENTRANTS_NS = '2528498259';
+                // Recursively list every file under /02. Entrants.
+                // For each "AR26 Disclaimers" PDF found, the entry number is taken from the
+                // leading digits of its PARENT FOLDER name — never from the filename itself.
                 while (hasMore) {
                     let response;
                     if (!cursor) {
-                        response = await fetch('https://api.dropboxapi.com/2/files/search_v2', {
+                        response = await fetch('https://api.dropboxapi.com/2/files/list_folder', {
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + token,
@@ -1142,15 +1147,13 @@
                                 'Dropbox-API-Path-Root': JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_ENTRANTS_NS})
                             },
                             body: JSON.stringify({
-                                query: 'AR26 Disclaimers',
-                                options: {
-                                    filename_only: true,
-                                    max_results: 100
-                                }
+                                path: ENTRANTS_PATH,
+                                recursive: true,
+                                include_non_downloadable_files: false
                             })
                         });
                     } else {
-                        response = await fetch('https://api.dropboxapi.com/2/files/search/continue_v2', {
+                        response = await fetch('https://api.dropboxapi.com/2/files/list_folder/continue', {
                             method: 'POST',
                             headers: {
                                 'Authorization': 'Bearer ' + token,
@@ -1163,44 +1166,39 @@
 
                     if (!response.ok) {
                         const errText = await response.text().catch(() => '');
-                        throw new Error(`Dropbox search failed: HTTP ${response.status} — ${errText}`);
+                        throw new Error(`Dropbox list_folder failed: HTTP ${response.status} — ${errText}`);
                     }
 
                     const data = await response.json();
                     hasMore = data.has_more || false;
                     cursor = data.cursor;
-                    console.log(`  🔍 Search page: ${(data.matches || []).length} results, has_more=${hasMore}`);
+                    pageCount++;
 
-                    // Parse entry ID from the parent FOLDER name, not the filename.
-                    // Dropbox folders are named "388 George Pappas" — first token is always the entry number.
-                    // Using the folder avoids misses when the PDF filename is renamed or lacks the entry number prefix.
-                    (data.matches || []).forEach(match => {
-                        // Handle both Dropbox search_v2 response shapes
-                        const meta = (match.metadata && match.metadata.metadata) || match.metadata || {};
-                        const name = meta.name || '';
-                        if (name.toLowerCase().includes('ar26 disclaimers') && name.toLowerCase().endsWith('.pdf')) {
-                            // Primary: extract from parent folder in path_display / path_lower
-                            // e.g. "/Adelaide Rally 2026/02. Entrants/388 George Pappas/AR26 Disclaimers.pdf" → "388"
-                            const path = meta.path_display || meta.path_lower || '';
-                            const pathParts = path.split('/').filter(Boolean);
-                            // The folder containing the PDF is the second-to-last segment
-                            const folderName = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : '';
-                            let entryId = folderName.split(' ')[0];
-                            // Fallback: if folder name doesn't start with a number, try the filename itself
-                            if (!entryId || !/^\d+$/.test(entryId)) {
-                                entryId = name.split(' ')[0];
-                            }
-                            if (entryId && /^\d+$/.test(entryId)) {
-                                verifiedEntryIds.add(entryId);
-                                console.log(`  📄 Entry ${entryId}: folder="${folderName}" file="${name}"`);
-                            } else {
-                                console.warn(`  ⚠ Could not extract entry ID — folder="${folderName}" file="${name}"`);
-                            }
+                    (data.entries || []).forEach(entry => {
+                        if (entry['.tag'] !== 'file') return;
+                        const name = entry.name || '';
+                        if (!name.toLowerCase().includes('ar26 disclaimers') || !name.toLowerCase().endsWith('.pdf')) return;
+
+                        // Extract entry number ONLY from the parent folder name.
+                        // path_display example: "/Massive Events Corp Folders/Adelaide Rally 2026/02. Entrants/554 Some Name/AR26 Disclaimers.pdf"
+                        // Second-to-last segment → "554 Some Name" → leading digits → "554"
+                        const path = entry.path_display || entry.path_lower || '';
+                        const pathParts = path.split('/').filter(Boolean);
+                        const folderName = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : '';
+                        const entryId = (folderName.match(/^(\d+)/) || [])[1] || '';
+
+                        if (entryId) {
+                            verifiedEntryIds.add(entryId);
+                            console.log(`  📄 Entry ${entryId} — folder: "${folderName}" / file: "${name}"`);
+                        } else {
+                            console.warn(`  ⚠ AR26 Disclaimers PDF found but folder has no leading entry number — folder: "${folderName}" / file: "${name}"`);
                         }
                     });
+
+                    console.log(`  📂 Page ${pageCount}: ${(data.entries||[]).length} items, has_more=${hasMore}`);
                 }
 
-                console.log(`✓ Dropbox scan complete: ${verifiedEntryIds.size} signed entries found:`, [...verifiedEntryIds].sort((a,b)=>a-b));
+                console.log(`✓ Dropbox folder scan complete (${pageCount} page${pageCount!==1?'s':''}): ${verifiedEntryIds.size} signed entries found:`, [...verifiedEntryIds].sort((a,b)=>Number(a)-Number(b)));
 
                 // Match against CSV and lock verified entries
                 let newlyVerified = 0;
