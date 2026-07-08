@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.15 - Porsche Centre Adelaide 901-929 (29), Porsche Club 930-960 (31) 2026-07-08 -->
+<!-- Adelaide Rally 2026 Dashboard v3.16 - Fix Dropbox re-injecting pre-migration 921-929 PC assignments after v3.15 slot renumber 2026-07-08 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -3349,6 +3349,7 @@
                     carNumberAssignments: carNumberAssignments,
                     customCarSlots: customCarSlots,
                     manualNavMatches: manualNavMatches,
+                    migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
                 };
                 const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
@@ -3538,6 +3539,24 @@
                         });
                     }
 
+                    // v3.16: Slot integrity enforcement — if the local v3.15 migration has run (921-929
+                    // moved from Porsche Club → Porsche Centre Adelaide) but the remote state predates
+                    // that migration (no 'migrations' field or doesn't include 'v3.15-porsche-renumber'),
+                    // the merge above may have re-injected stale PC assignments into those slots. Strip them.
+                    {
+                        const localMigrations = JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]');
+                        const remoteMigrations = Array.isArray(remoteState.migrations) ? remoteState.migrations : [];
+                        if (localMigrations.includes('v3.15-porsche-renumber') &&
+                            !remoteMigrations.includes('v3.15-porsche-renumber')) {
+                            ['921','922','923','924','925','926','927','928','929'].forEach(n => {
+                                if (carNumberAssignments[n]) {
+                                    delete carNumberAssignments[n];
+                                    stateUpdated = true;
+                                }
+                            });
+                        }
+                    }
+
                     // Merge customCarSlots: add any remote custom slots not already in local list
                     if (Array.isArray(remoteState.customCarSlots)) {
                         const localCarNums = new Set(customCarSlots.map(s => s.carNum));
@@ -3629,6 +3648,7 @@
                     carNumberAssignments,
                     customCarSlots,
                     manualNavMatches,
+                    migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: now,
                     syncedBy: 'Dashboard User'
                 };
