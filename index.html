@@ -1180,12 +1180,15 @@
                         const pathParts = path.split('/').filter(Boolean);
                         console.log(`  🗂 Raw path: ${path}`);
 
-                        // All segments except the last (filename), searched from deepest upward
+                        // All segments except the last (filename), searched from deepest upward.
+                        // Require digits FOLLOWED BY A SPACE — this matches entrant folders like
+                        // "554 John Smith" or "51 Laszlo Bachmayer" but NOT "02. Entrants" or
+                        // "01. Documents" which start with digits followed by a dot.
                         const segments = pathParts.slice(0, -1);
                         let entryId = '';
                         let matchedFolder = '';
                         for (let i = segments.length - 1; i >= 0; i--) {
-                            const m = segments[i].match(/^(\d+)/);
+                            const m = segments[i].match(/^(\d+)\s/);
                             if (m) { entryId = m[1]; matchedFolder = segments[i]; break; }
                         }
 
