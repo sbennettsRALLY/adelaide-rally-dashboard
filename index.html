@@ -1124,8 +1124,10 @@
                     return;
                 }
 
-                // Namespace header is required for search_v2 to reach team folder files.
-                const DROPBOX_ENTRANTS_NS = '2528498259';
+                // Use the Adelaide Rally 2026 folder namespace (4171198097) so the search
+                // is scoped to this event only, not the entire team Dropbox.
+                // Path '/02. Entrants' restricts results to the entrants subfolder only.
+                const DROPBOX_ENTRANTS_NS = '4171198097';
                 const verifiedEntryIds = new Set();
                 let cursor = null;
                 let hasMore = true;
@@ -1142,7 +1144,7 @@
                             },
                             body: JSON.stringify({
                                 query: 'disclaimer',
-                                options: { filename_only: true, max_results: 100 }
+                                options: { filename_only: true, max_results: 100, path: '/02. Entrants' }
                             })
                         });
                     } else {
