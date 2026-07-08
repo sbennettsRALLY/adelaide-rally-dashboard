@@ -1128,11 +1128,6 @@
                 // Path '/Adelaide Rally 2026/02. Entrants' restricts search to this event only.
                 const DROPBOX_ENTRANTS_NS = '2528498259';
 
-                // Clear all existing disclaimer states so this scan is the authoritative
-                // source of truth — only entries confirmed in Dropbox will be ticked.
-                Object.keys(disclaimerChecked).forEach(k => { disclaimerChecked[k] = false; });
-                Object.keys(disclaimerLocked).forEach(k => { disclaimerLocked[k] = false; });
-
                 const verifiedEntryIds = new Set();
                 let cursor = null;
                 let hasMore = true;
@@ -1218,11 +1213,11 @@
                     const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                     if (!entryId || !verifiedEntryIds.has(entryId)) return;
 
-                    if (!disclaimerLocked[entryId]) {
+                    if (!disclaimerChecked[entryId]) {
                         disclaimerChecked[entryId] = true;
                         disclaimerLocked[entryId] = true;
                         newlyVerified++;
-                        console.log(`  ✓ Entry ${entryId} marked as DocuSign verified`);
+                        console.log(`  ✓ Entry ${entryId} marked as verified`);
                     } else {
                         alreadyVerified++;
                     }
