@@ -1128,6 +1128,12 @@
                 // is scoped to this event only, not the entire team Dropbox.
                 // Path '/02. Entrants' restricts results to the entrants subfolder only.
                 const DROPBOX_ENTRANTS_NS = '4171198097';
+
+                // Clear all existing disclaimer states so this scan is the authoritative
+                // source of truth — only entries confirmed in Dropbox will be ticked.
+                Object.keys(disclaimerChecked).forEach(k => { disclaimerChecked[k] = false; });
+                Object.keys(disclaimerLocked).forEach(k => { disclaimerLocked[k] = false; });
+
                 const verifiedEntryIds = new Set();
                 let cursor = null;
                 let hasMore = true;
