@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.14 - Fix Dropbox sync: full CSV propagation + car numbers/nav matches sync 2026-07-08 -->
+<!-- Adelaide Rally 2026 Dashboard v3.15 - Porsche Centre Adelaide 901-929 (29), Porsche Club 930-960 (31) 2026-07-08 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1278,6 +1278,20 @@
             } else {
                 loadFromStorage();
             }
+            // One-time migration: clear 921-929 assignments (moved from Porsche Club → Porsche Centre Adelaide in v3.15)
+            (function applyMigrationV315() {
+                const migKey = 'adelaideRallyMigrations';
+                const done = JSON.parse(localStorage.getItem(migKey) || '[]');
+                if (!done.includes('v3.15-porsche-renumber')) {
+                    ['921','922','923','924','925','926','927','928','929'].forEach(n => {
+                        delete carNumberAssignments[n];
+                    });
+                    done.push('v3.15-porsche-renumber');
+                    localStorage.setItem(migKey, JSON.stringify(done));
+                    saveToStorage();
+                    console.log('✓ Migration v3.15: cleared car #921-929 (Porsche Club → Porsche Centre Adelaide)');
+                }
+            })();
             // Initialize Dropbox sync with SDK load waiting
             initDropboxSyncWhenReady();
             // Render the default Document Chase view if data is available
@@ -4827,25 +4841,28 @@
             {carNum:'913',category:'Porsche Centre Adelaide',role:'Entrant'},
             {carNum:'914',category:'Porsche Centre Adelaide',role:'Entrant'},
             {carNum:'915',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'916',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'917',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'918',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'919',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'920',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'921',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'922',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'923',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'924',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'925',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'926',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'927',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'928',category:'Porsche Centre Adelaide',role:'Entrant'},
+            {carNum:'929',category:'Porsche Centre Adelaide',role:'Entrant'},
             {carNum:'TF12',category:'Porsche Centre Adelaide',role:'Tour Follower'},
             {carNum:'TL10',category:'Porsche Club',role:'Tour Leader'},
-            {carNum:'921',category:'Porsche Club',role:'Entrant'},
-            {carNum:'922',category:'Porsche Club',role:'Entrant'},
-            {carNum:'923',category:'Porsche Club',role:'Entrant'},
-            {carNum:'924',category:'Porsche Club',role:'Entrant'},
-            {carNum:'925',category:'Porsche Club',role:'Entrant'},
-            {carNum:'926',category:'Porsche Club',role:'Entrant'},
-            {carNum:'927',category:'Porsche Club',role:'Entrant'},
-            {carNum:'928',category:'Porsche Club',role:'Entrant'},
-            {carNum:'929',category:'Porsche Club',role:'Entrant'},
             {carNum:'930',category:'Porsche Club',role:'Entrant'},
             {carNum:'931',category:'Porsche Club',role:'Entrant'},
             {carNum:'932',category:'Porsche Club',role:'Entrant'},
             {carNum:'933',category:'Porsche Club',role:'Entrant'},
             {carNum:'934',category:'Porsche Club',role:'Entrant'},
             {carNum:'935',category:'Porsche Club',role:'Entrant'},
-            {carNum:'TF10',category:'Porsche Club',role:'Tour Follower'},
-            {carNum:'TL11',category:'Porsche Club',role:'Tour Leader'},
             {carNum:'936',category:'Porsche Club',role:'Entrant'},
             {carNum:'937',category:'Porsche Club',role:'Entrant'},
             {carNum:'938',category:'Porsche Club',role:'Entrant'},
@@ -4855,12 +4872,24 @@
             {carNum:'942',category:'Porsche Club',role:'Entrant'},
             {carNum:'943',category:'Porsche Club',role:'Entrant'},
             {carNum:'944',category:'Porsche Club',role:'Entrant'},
+            {carNum:'TF10',category:'Porsche Club',role:'Tour Follower'},
+            {carNum:'TL11',category:'Porsche Club',role:'Tour Leader'},
             {carNum:'945',category:'Porsche Club',role:'Entrant'},
             {carNum:'946',category:'Porsche Club',role:'Entrant'},
             {carNum:'947',category:'Porsche Club',role:'Entrant'},
             {carNum:'948',category:'Porsche Club',role:'Entrant'},
             {carNum:'949',category:'Porsche Club',role:'Entrant'},
             {carNum:'950',category:'Porsche Club',role:'Entrant'},
+            {carNum:'951',category:'Porsche Club',role:'Entrant'},
+            {carNum:'952',category:'Porsche Club',role:'Entrant'},
+            {carNum:'953',category:'Porsche Club',role:'Entrant'},
+            {carNum:'954',category:'Porsche Club',role:'Entrant'},
+            {carNum:'955',category:'Porsche Club',role:'Entrant'},
+            {carNum:'956',category:'Porsche Club',role:'Entrant'},
+            {carNum:'957',category:'Porsche Club',role:'Entrant'},
+            {carNum:'958',category:'Porsche Club',role:'Entrant'},
+            {carNum:'959',category:'Porsche Club',role:'Entrant'},
+            {carNum:'960',category:'Porsche Club',role:'Entrant'},
             {carNum:'TF11',category:'Porsche Club',role:'Tour Follower'},
             {carNum:'TL13',category:'Ferrari Club',role:'Tour Leader'},
             {carNum:'961',category:'Ferrari Club',role:'Entrant'},
