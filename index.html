@@ -1141,7 +1141,7 @@
                                 'Dropbox-API-Path-Root': JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_ENTRANTS_NS})
                             },
                             body: JSON.stringify({
-                                query: 'AR26 Disclaimers',
+                                query: 'disclaimer',
                                 options: { filename_only: true, max_results: 100 }
                             })
                         });
@@ -1170,7 +1170,7 @@
                     (data.matches || []).forEach(match => {
                         const meta = (match.metadata && match.metadata.metadata) || match.metadata || {};
                         const name = meta.name || '';
-                        if (!name.toLowerCase().includes('ar26 disclaimers') || !name.toLowerCase().endsWith('.pdf')) return;
+                        if (!name.toLowerCase().includes('disclaimer')) return;
 
                         // Entry number comes ONLY from the leading digits of the entrant folder name.
                         // The entrant folder is always "554 [whatever name]" — only the number matters.
