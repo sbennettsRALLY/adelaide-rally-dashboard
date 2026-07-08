@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.16 - Fix Dropbox re-injecting pre-migration 921-929 PC assignments after v3.15 slot renumber 2026-07-08 -->
+<!-- Adelaide Rally 2026 Dashboard v3.17 - Disclaimer check uses parent folder entry number not filename 2026-07-08 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1171,16 +1171,30 @@
                     cursor = data.cursor;
                     console.log(`  🔍 Search page: ${(data.matches || []).length} results, has_more=${hasMore}`);
 
-                    // Parse entry ID from filename: "388 George Pappas AR26 Disclaimers.pdf" → "388"
+                    // Parse entry ID from the parent FOLDER name, not the filename.
+                    // Dropbox folders are named "388 George Pappas" — first token is always the entry number.
+                    // Using the folder avoids misses when the PDF filename is renamed or lacks the entry number prefix.
                     (data.matches || []).forEach(match => {
                         // Handle both Dropbox search_v2 response shapes
                         const meta = (match.metadata && match.metadata.metadata) || match.metadata || {};
                         const name = meta.name || '';
                         if (name.toLowerCase().includes('ar26 disclaimers') && name.toLowerCase().endsWith('.pdf')) {
-                            const entryId = name.split(' ')[0];
+                            // Primary: extract from parent folder in path_display / path_lower
+                            // e.g. "/Adelaide Rally 2026/02. Entrants/388 George Pappas/AR26 Disclaimers.pdf" → "388"
+                            const path = meta.path_display || meta.path_lower || '';
+                            const pathParts = path.split('/').filter(Boolean);
+                            // The folder containing the PDF is the second-to-last segment
+                            const folderName = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : '';
+                            let entryId = folderName.split(' ')[0];
+                            // Fallback: if folder name doesn't start with a number, try the filename itself
+                            if (!entryId || !/^\d+$/.test(entryId)) {
+                                entryId = name.split(' ')[0];
+                            }
                             if (entryId && /^\d+$/.test(entryId)) {
                                 verifiedEntryIds.add(entryId);
-                                console.log(`  📄 Entry ${entryId}: ${name}`);
+                                console.log(`  📄 Entry ${entryId}: folder="${folderName}" file="${name}"`);
+                            } else {
+                                console.warn(`  ⚠ Could not extract entry ID — folder="${folderName}" file="${name}"`);
                             }
                         }
                     });
