@@ -1172,20 +1172,28 @@
                         const name = meta.name || '';
                         if (!name.toLowerCase().includes('ar26 disclaimers') || !name.toLowerCase().endsWith('.pdf')) return;
 
-                        // Entry number comes ONLY from the leading digits of the parent folder name.
-                        // The folder is always "554 [whatever name]" — we only care about "554".
-                        // Filename is ignored entirely so name changes in Dropbox don't affect matching.
+                        // Entry number comes ONLY from the leading digits of the entrant folder name.
+                        // The entrant folder is always "554 [whatever name]" — only the number matters.
+                        // We scan ALL path segments (excluding the filename at the end) to find the one
+                        // that starts with digits — this works even if the PDF is in a subfolder.
                         const path = meta.path_display || meta.path_lower || '';
                         const pathParts = path.split('/').filter(Boolean);
-                        // Parent folder = second-to-last path segment
-                        const folderName = pathParts.length >= 2 ? pathParts[pathParts.length - 2] : '';
-                        const entryId = (folderName.match(/^(\d+)/) || [])[1] || '';
+                        console.log(`  🗂 Raw path: ${path}`);
+
+                        // All segments except the last (filename), searched from deepest upward
+                        const segments = pathParts.slice(0, -1);
+                        let entryId = '';
+                        let matchedFolder = '';
+                        for (let i = segments.length - 1; i >= 0; i--) {
+                            const m = segments[i].match(/^(\d+)/);
+                            if (m) { entryId = m[1]; matchedFolder = segments[i]; break; }
+                        }
 
                         if (entryId) {
                             verifiedEntryIds.add(entryId);
-                            console.log(`  📄 Entry ${entryId} — folder: "${folderName}" / file: "${name}"`);
+                            console.log(`  📄 Entry ${entryId} — folder: "${matchedFolder}" / file: "${name}"`);
                         } else {
-                            console.warn(`  ⚠ Found AR26 Disclaimers PDF but folder has no leading entry number — folder: "${folderName}" / file: "${name}"`);
+                            console.warn(`  ⚠ No entry number found in path: ${path}`);
                         }
                     });
                 }
