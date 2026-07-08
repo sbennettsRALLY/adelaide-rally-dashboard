@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.13 - Fix withdrawn entrants appearing in car numbering tab 2026-07-07 -->
+<!-- Adelaide Rally 2026 Dashboard v3.14 - Fix Dropbox sync: full CSV propagation + car numbers/nav matches sync 2026-07-08 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -3332,6 +3332,9 @@
                     disclaimerLocked: disclaimerLocked,
                     withdrawn: Array.from(withdrawn),
                     navigationMarryEntries: navigationMarryEntries,
+                    carNumberAssignments: carNumberAssignments,
+                    customCarSlots: customCarSlots,
+                    manualNavMatches: manualNavMatches,
                     timestamp: Date.now()
                 };
                 const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
@@ -3414,33 +3417,36 @@
                     let hasChanges = false;
 
                     // MERGE STRATEGY: Intelligently merge user-input fields without overwriting local state
-                    // For CSV entries: keep all unique entries from both local and remote
+                    // For CSV data: the remote state is the canonical source (uploaded by primary user).
+                    // Use remote wholesale when it has more entries; otherwise add any new IDs from remote.
                     if (remoteState.csvData && remoteState.csvHeaders) {
-                        // Use remote headers as source of truth
-                        if (remoteState.csvHeaders) csvHeaders = remoteState.csvHeaders;
-
-                        // Merge CSV data: combine unique entries by Entry ID
-                        const existingEntryIds = new Set(csvData.map(row => {
+                        const remoteCount = remoteState.csvData.length;
+                        const localCount  = csvData.length;
+                        if (remoteCount > localCount) {
+                            // Remote is more complete — replace local entirely
+                            csvHeaders = remoteState.csvHeaders;
+                            csvData    = remoteState.csvData;
+                            hasChanges = true;
+                            console.log('✓ CSV replaced from Dropbox:', remoteCount, 'entries (local had', localCount, ')');
+                        } else if (remoteCount === localCount && localCount === 0) {
+                            // Both empty — nothing to do
+                        } else {
+                            // Local has more entries than remote (primary user has uploaded a newer CSV
+                            // that hasn't reached Dropbox yet). Keep local, but merge any remote rows
+                            // that are genuinely new (checked by entry ID to avoid duplication).
                             const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                            return entryIdIdx >= 0 ? row[entryIdIdx] : null;
-                        }).filter(id => id));
-
-                        const remoteEntryIds = new Set(remoteState.csvData.map(row => {
-                            const entryIdIdx = remoteState.csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                            return entryIdIdx >= 0 ? row[entryIdIdx] : null;
-                        }).filter(id => id));
-
-                        // Add any new entries from remote that aren't in local
-                        remoteState.csvData.forEach((remoteRow, idx) => {
-                            const entryIdIdx = remoteState.csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                            const remoteEntryId = entryIdIdx >= 0 ? remoteRow[entryIdIdx] : null;
-                            if (remoteEntryId && !existingEntryIds.has(remoteEntryId)) {
-                                csvData.push(remoteRow);
-                                hasChanges = true;
-                            }
-                        });
-                        if (hasChanges) {
-                            console.log('✓ Merged CSV data - Total entries now:', csvData.length);
+                            const existingIds = new Set(
+                                entryIdIdx >= 0 ? csvData.map(r => r[entryIdIdx]).filter(Boolean) : []
+                            );
+                            const remoteIdIdx = remoteState.csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                            remoteState.csvData.forEach(remoteRow => {
+                                const remoteId = remoteIdIdx >= 0 ? remoteRow[remoteIdIdx] : null;
+                                if (remoteId && !existingIds.has(remoteId)) {
+                                    csvData.push(remoteRow);
+                                    hasChanges = true;
+                                }
+                            });
+                            if (hasChanges) console.log('✓ Merged CSV — added rows from Dropbox. Total:', csvData.length);
                         }
                     }
 
@@ -3508,6 +3514,39 @@
                         stateUpdated = stateUpdated || marryUpdated;
                     }
 
+                    // Merge carNumberAssignments: remote values fill any locally unassigned slots
+                    if (remoteState.carNumberAssignments && typeof remoteState.carNumberAssignments === 'object') {
+                        Object.entries(remoteState.carNumberAssignments).forEach(([carNum, assignment]) => {
+                            if (assignment && !carNumberAssignments[carNum]) {
+                                carNumberAssignments[carNum] = assignment;
+                                stateUpdated = true;
+                            }
+                        });
+                    }
+
+                    // Merge customCarSlots: add any remote custom slots not already in local list
+                    if (Array.isArray(remoteState.customCarSlots)) {
+                        const localCarNums = new Set(customCarSlots.map(s => s.carNum));
+                        remoteState.customCarSlots.forEach(slot => {
+                            if (slot && slot.carNum && !localCarNums.has(slot.carNum)) {
+                                customCarSlots.push(slot);
+                                stateUpdated = true;
+                            }
+                        });
+                    }
+
+                    // Merge manualNavMatches: add any remote matches not already in local list
+                    if (Array.isArray(remoteState.manualNavMatches)) {
+                        const localMatchKeys = new Set(manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
+                        remoteState.manualNavMatches.forEach(match => {
+                            const key = match.driverEntryId + '|' + match.navigatorEntryId;
+                            if (!localMatchKeys.has(key)) {
+                                manualNavMatches.push(match);
+                                stateUpdated = true;
+                            }
+                        });
+                    }
+
                     if (hasChanges || stateUpdated) {
                         console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
                         lastSyncTimestamp = Date.now();
@@ -3573,6 +3612,9 @@
                     disclaimerChecked,
                     disclaimerLocked,
                     withdrawn: Array.from(withdrawn),
+                    carNumberAssignments,
+                    customCarSlots,
+                    manualNavMatches,
                     timestamp: now,
                     syncedBy: 'Dashboard User'
                 };
