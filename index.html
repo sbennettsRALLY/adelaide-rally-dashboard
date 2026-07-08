@@ -1068,6 +1068,7 @@
         let photoIdVerified = {}; // Track which entries have Photo ID verified
         let disclaimerChecked = {}; // Track which entries have disclaimer checked (auto or manual)
         let disclaimerLocked = {}; // Track which entries are locked (found via Dropbox verification)
+        let disclaimerManual = {}; // Track which entries were manually checked by the user
         let withdrawn = new Set(); // Track withdrawn entrant indices
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
@@ -1128,10 +1129,10 @@
                 // Path '/Adelaide Rally 2026/02. Entrants' restricts search to this event only.
                 const DROPBOX_ENTRANTS_NS = '2528498259';
 
-                // Clear all existing disclaimer states so this scan is the authoritative
-                // source of truth — only entries confirmed in Dropbox will be ticked.
-                Object.keys(disclaimerChecked).forEach(k => { disclaimerChecked[k] = false; });
-                Object.keys(disclaimerLocked).forEach(k => { disclaimerLocked[k] = false; });
+                // Clear only non-manual disclaimer states. Manually checked entries are
+                // preserved — the scan only re-verifies entries not already manually confirmed.
+                Object.keys(disclaimerChecked).forEach(k => { if (!disclaimerManual[k]) disclaimerChecked[k] = false; });
+                Object.keys(disclaimerLocked).forEach(k => { if (!disclaimerManual[k]) disclaimerLocked[k] = false; });
 
                 const verifiedEntryIds = new Set();
                 let cursor = null;
@@ -1218,11 +1219,11 @@
                     const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                     if (!entryId || !verifiedEntryIds.has(entryId)) return;
 
-                    if (!disclaimerLocked[entryId]) {
+                    if (!disclaimerManual[entryId] && !disclaimerLocked[entryId]) {
                         disclaimerChecked[entryId] = true;
                         disclaimerLocked[entryId] = true;
                         newlyVerified++;
-                        console.log(`  ✓ Entry ${entryId} marked as DocuSign verified`);
+                        console.log(`  ✓ Entry ${entryId} marked as scan-verified`);
                     } else {
                         alreadyVerified++;
                     }
@@ -1288,6 +1289,7 @@
                     photoIdVerified = data.photoIdVerified || {};
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
+                    disclaimerManual = data.disclaimerManual || {};
                     withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                     if (csvData.length > 0) {
                         document.getElementById('navBar').style.display = 'flex';
@@ -1865,9 +1867,15 @@
                 const disclaimerCheckbox = document.createElement('input');
                 disclaimerCheckbox.type = 'checkbox';
                 disclaimerCheckbox.checked = disclaimerChecked[entryId] || false;
-                disclaimerCheckbox.disabled = disclaimerLocked[entryId] || false; // Only disabled if locked
+                disclaimerCheckbox.disabled = (disclaimerLocked[entryId] && !disclaimerManual[entryId]) || false;
                 disclaimerCheckbox.addEventListener('click', (e) => {
                     disclaimerChecked[entryId] = e.target.checked;
+                    if (e.target.checked) {
+                        disclaimerManual[entryId] = true;  // Mark as manually verified
+                    } else {
+                        delete disclaimerManual[entryId]; // Unchecked — remove manual flag
+                        delete disclaimerLocked[entryId]; // Allow scan to re-verify
+                    }
                     saveToStorage();
                     updateDocStats();
                     updateRowStyling(idx);
@@ -2948,6 +2956,7 @@
                 photoIdVerified,
                 disclaimerChecked,
                 disclaimerLocked,
+                disclaimerManual,
                 timestamp: new Date().toISOString(),
                 exportedAt: new Date().toLocaleString()
             };
@@ -2983,6 +2992,7 @@
                         photoIdVerified = data.photoIdVerified || {};
                         disclaimerChecked = data.disclaimerChecked || {};
                         disclaimerLocked = data.disclaimerLocked || {};
+                        disclaimerManual = data.disclaimerManual || {};
                         saveToStorage();
                         // Update UI
                         if (csvData.length > 0) {
@@ -3079,6 +3089,7 @@
                 photoIdVerified,
                 disclaimerChecked,
                 disclaimerLocked,
+                disclaimerManual,
                 withdrawn: Array.from(withdrawn),
                 carNumberAssignments,
                 customCarSlots,
@@ -3102,6 +3113,7 @@
                     photoIdVerified = data.photoIdVerified || {};
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
+                    disclaimerManual = data.disclaimerManual || {};
                     withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                     carNumberAssignments = data.carNumberAssignments || {};
                     customCarSlots = data.customCarSlots || [];
@@ -3366,6 +3378,7 @@
                     photoIdVerified: photoIdVerified,
                     disclaimerChecked: disclaimerChecked,
                     disclaimerLocked: disclaimerLocked,
+                    disclaimerManual: disclaimerManual,
                     withdrawn: Array.from(withdrawn),
                     navigationMarryEntries: navigationMarryEntries,
                     carNumberAssignments: carNumberAssignments,
@@ -3527,6 +3540,15 @@
                         }
                     }
 
+                    // Merge disclaimerManual: both local and remote manual flags win
+                    if (remoteState.disclaimerManual && typeof remoteState.disclaimerManual === 'object') {
+                        const merged = { ...remoteState.disclaimerManual, ...disclaimerManual };
+                        if (JSON.stringify(merged) !== JSON.stringify(disclaimerManual)) {
+                            disclaimerManual = merged;
+                            stateUpdated = true;
+                        }
+                    }
+
                     // Merge withdrawn set: combine all withdrawn entry IDs from both local and remote
                     if (remoteState.withdrawn && Array.isArray(remoteState.withdrawn)) {
                         const remoteWithdrawn = new Set(remoteState.withdrawn);
@@ -3638,6 +3660,7 @@
                 photoIdVerified = data.photoIdVerified || {};
                 disclaimerChecked = data.disclaimerChecked || {};
                 disclaimerLocked = data.disclaimerLocked || {};
+                disclaimerManual = data.disclaimerManual || {};
                 withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                 lastSyncTimestamp = data.timestamp || 0;
                 console.log('✓ Loaded state from Dropbox');
@@ -3666,6 +3689,7 @@
                     photoIdVerified,
                     disclaimerChecked,
                     disclaimerLocked,
+                    disclaimerManual,
                     withdrawn: Array.from(withdrawn),
                     carNumberAssignments,
                     customCarSlots,
