@@ -3724,8 +3724,9 @@
             activeBody.innerHTML = '';
             let activeCount = 0;
             csvData.forEach((row, idx) => {
-                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
-                if (withdrawn.has(entryId)) return; // Skip withdrawn
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                const withdrawKey = entryId || `_row_${idx}`;
+                if (withdrawn.has(withdrawKey) || withdrawn.has(entryId)) return; // Skip withdrawn
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                 const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
@@ -3788,7 +3789,7 @@
                 btnWithdraw.style.border = 'none';
                 btnWithdraw.style.borderRadius = '4px';
                 btnWithdraw.style.cursor = 'pointer';
-                btnWithdraw.onclick = () => withdrawEntrant(idx);
+                btnWithdraw.onclick = () => withdrawEntrant(idx, withdrawKey);
                 tdAction.appendChild(btnWithdraw);
                 tr.appendChild(tdAction);
                 activeBody.appendChild(tr);
@@ -3966,23 +3967,23 @@
             }
             dupDiv.innerHTML = dupHtml;
         }
-        function withdrawEntrant(idx) {
+        function withdrawEntrant(idx, withdrawKey) {
             if (confirm(`Are you sure you want to withdraw this entrant?`)) {
                 const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                const entryId = entryIdIdx >= 0 ? csvData[idx][entryIdIdx] : '';
-                if (entryId) {
-                    withdrawn.add(String(entryId));
-                    saveToStorage();
-                    renderWithdrawalTab();
-                    // Update all other views to reflect the withdrawal
-                    renderDocTable();
-                    updateDocStats();
-                    filterDocuments();
-                    renderMALicenceTable();
-                    renderNavMarryTable();
-                    filterCsvTable();
-                    showMessage('withdrawMsg', 'success', '✓ Entrant withdrawn');
-                }
+                const entryId = entryIdIdx >= 0 ? (csvData[idx][entryIdIdx] || '').trim() : '';
+                // withdrawKey is passed from the render loop (entryId or _row_N fallback).
+                // Recompute here if not supplied (e.g. called from elsewhere).
+                if (!withdrawKey) withdrawKey = entryId || `_row_${idx}`;
+                withdrawn.add(withdrawKey);
+                saveToStorage();
+                renderWithdrawalTab();
+                renderDocTable();
+                updateDocStats();
+                filterDocuments();
+                renderMALicenceTable();
+                renderNavMarryTable();
+                filterCsvTable();
+                showMessage('withdrawMsg', 'success', '✓ Entrant withdrawn');
             }
         }
         function restoreEntrant(entryId) {
