@@ -571,6 +571,7 @@
             <button class="nav-btn active" onclick="switchView('dashboard')">Dashboard</button>
             <button class="nav-btn" onclick="switchView('doc-chase')">Document Chase</button>
             <button class="nav-btn" onclick="switchView('ma-licence')">MA Licence Obtain</button>
+            <button class="nav-btn" onclick="switchView('ma-licence-checks')">MA Licence Checks</button>
             <button class="nav-btn" onclick="switchView('nav-marry')">Nav Marry</button>
             <button class="nav-btn" onclick="switchView('withdrawals')">Withdrawals</button>
             <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
@@ -775,6 +776,43 @@
                 </table>
             </div>
             <div id="maNoData" class="no-data" style="display: none;">
+                <p>No data loaded</p>
+            </div>
+        </div>
+        <!-- MA Licence Checks View -->
+        <div id="ma-licence-checks" class="view">
+            <div id="maChecksMsg" class="message"></div>
+            <div class="sec-title">Motorsport Australia Licence - Checks</div>
+            <div class="filters">
+                <input type="text" id="maChecksSearch" class="fins" placeholder="Search by name, entry #, licence number..." />
+            </div>
+            <div class="stat-row">
+                <div class="stat-chip no-click">
+                    <div class="num" id="maChecksTotal">0</div>
+                    <div class="lbl">Total with MA Licence</div>
+                </div>
+                <div class="stat-chip no-click" style="background: #FEF3C7;">
+                    <div class="num" id="maChecksExpired">0</div>
+                    <div class="lbl">Expired / Missing Expiry</div>
+                </div>
+            </div>
+            <div class="tbl-wrap">
+                <table id="maChecksTable" style="width:100%;">
+                    <thead>
+                        <tr id="maChecksHead">
+                            <th>Entry #</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th>Licence #</th>
+                            <th>Licence Type</th>
+                            <th>Expiry</th>
+                        </tr>
+                    </thead>
+                    <tbody id="maChecksBody"></tbody>
+                </table>
+            </div>
+            <div id="maChecksNoData" class="no-data" style="display:none;">
                 <p>No data loaded</p>
             </div>
         </div>
@@ -1329,6 +1367,7 @@
             document.getElementById('csvSearch').addEventListener('keyup', filterCsvTable);
             document.getElementById('docSearch').addEventListener('keyup', filterDocuments);
             document.getElementById('maSearch').addEventListener('keyup', renderMALicenceTable);
+            document.getElementById('maChecksSearch').addEventListener('keyup', renderMALicenceChecks);
             document.getElementById('navSearch').addEventListener('keyup', renderNavMarryTable);
             document.getElementById('withdrawSearch').addEventListener('keyup', renderWithdrawalTab);
             document.getElementById('withdrawnSearch').addEventListener('keyup', renderWithdrawalTab);
@@ -2193,6 +2232,118 @@
             document.getElementById('docOutstandingPayment').textContent = outstandingPayment;
             document.getElementById('docComplete').textContent = complete;
         }
+        function renderMALicenceChecks() {
+            const tbody = document.getElementById('maChecksBody');
+            const noData = document.getElementById('maChecksNoData');
+            const table = document.getElementById('maChecksTable');
+            tbody.innerHTML = '';
+            if (csvData.length === 0) {
+                noData.style.display = 'block';
+                table.style.display = 'none';
+                document.getElementById('maChecksTotal').textContent = '0';
+                document.getElementById('maChecksExpired').textContent = '0';
+                return;
+            }
+            noData.style.display = 'none';
+            table.style.display = 'table';
+
+            // Column indices
+            const entryIdIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const firstNameIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lastNameIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const mainTypeIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const licenceHoldsIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
+            const licenceNumIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+            const licenceTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
+            const licenceExpiryIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
+            const categoryIdxs  = csvHeaders
+                .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
+                .filter(i => i >= 0);
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const searchTerm = document.getElementById('maChecksSearch').value.toLowerCase();
+
+            // Sort by entry number ascending
+            const sortedIndices = Array.from({length: csvData.length}, (_, i) => i)
+                .sort((a, b) => {
+                    const nA = entryIdIdx >= 0 ? parseInt(csvData[a][entryIdIdx]) || 0 : 0;
+                    const nB = entryIdIdx >= 0 ? parseInt(csvData[b][entryIdIdx]) || 0 : 0;
+                    return nA - nB;
+                });
+
+            let total = 0, expired = 0;
+            sortedIndices.forEach(idx => {
+                const row = csvData[idx];
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId) return;
+                if (withdrawn.has(entryId)) return;
+
+                // Only show entrants who already hold a valid MA licence (answered Yes)
+                const holdsLicence = licenceHoldsIdx >= 0 ? (row[licenceHoldsIdx] || '').trim() : '';
+                if (!holdsLicence.toLowerCase().startsWith('yes')) return;
+
+                const firstName   = firstNameIdx >= 0  ? (row[firstNameIdx] || '').trim()  : '';
+                const lastName    = lastNameIdx >= 0   ? (row[lastNameIdx] || '').trim()   : '';
+                const fullName    = [firstName, lastName].filter(Boolean).join(' ') || entryId;
+                const entrantType = mainTypeIdx >= 0   ? (row[mainTypeIdx] || '').trim()   : '';
+                const category    = getCategory(row, categoryIdxs);
+                const licenceNum  = licenceNumIdx >= 0  ? (row[licenceNumIdx] || '').trim()  : '';
+                const licenceType = licenceTypeIdx >= 0 ? (row[licenceTypeIdx] || '').trim() : '';
+                const licenceExpiry = licenceExpiryIdx >= 0 ? (row[licenceExpiryIdx] || '').trim() : '';
+
+                // Search filter
+                const searchable = [entryId, fullName, licenceNum, licenceType].join(' ').toLowerCase();
+                if (searchTerm && !searchable.includes(searchTerm)) return;
+
+                // Determine if licence is expired or expiry is missing
+                let isExpired = false;
+                if (!licenceExpiry) {
+                    isExpired = true;
+                } else {
+                    // Parse common date formats (dd/mm/yyyy or yyyy-mm-dd or dd-mm-yyyy)
+                    let expDate = null;
+                    const parts = licenceExpiry.split(/[\/\-\.]/);
+                    if (parts.length === 3) {
+                        if (parts[0].length === 4) {
+                            // yyyy-mm-dd
+                            expDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                        } else {
+                            // dd/mm/yyyy or dd-mm-yyyy
+                            expDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                        }
+                    }
+                    if (expDate && !isNaN(expDate)) {
+                        isExpired = expDate < today;
+                    } else {
+                        isExpired = true; // unparseable — flag it
+                    }
+                }
+
+                total++;
+                if (isExpired) expired++;
+
+                const tr = document.createElement('tr');
+                if (isExpired) {
+                    tr.style.background = '#FEF2F2';
+                    tr.style.color = '#991B1B';
+                }
+
+                const cells = [entryId, fullName, entrantType, category, licenceNum, licenceType, licenceExpiry || '⚠ Missing'];
+                cells.forEach((val, i) => {
+                    const td = document.createElement('td');
+                    td.textContent = val;
+                    td.style.padding = '8px';
+                    if (i === 6 && isExpired) td.style.fontWeight = '600';
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('maChecksTotal').textContent = total;
+            document.getElementById('maChecksExpired').textContent = expired;
+        }
+
         function renderNavMarryTable() {
             if (csvData.length === 0) {
                 document.getElementById('navPairsNoData').style.display = 'block';
@@ -3020,6 +3171,8 @@
                 renderDocTable();
             } else if (viewName === 'ma-licence') {
                 renderMALicenceTable();
+            } else if (viewName === 'ma-licence-checks') {
+                renderMALicenceChecks();
             } else if (viewName === 'nav-marry') {
                 renderNavMarryTable();
             } else if (viewName === 'withdrawals') {
@@ -3981,6 +4134,7 @@
                 updateDocStats();
                 filterDocuments();
                 renderMALicenceTable();
+                renderMALicenceChecks();
                 renderNavMarryTable();
                 filterCsvTable();
                 showMessage('withdrawMsg', 'success', '✓ Entrant withdrawn');
@@ -3996,6 +4150,7 @@
                 updateDocStats();
                 filterDocuments();
                 renderMALicenceTable();
+                renderMALicenceChecks();
                 renderNavMarryTable();
                 filterCsvTable();
                 showMessage('withdrawMsg', 'success', '✓ Entrant restored');
