@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.38 - MA Checks: Licence Ok checkbox column; Category/Type/Expiry filters 2026-07-14 -->
+<!-- Adelaide Rally 2026 Dashboard v3.39 - DocuSign scan: robust folder matching; fix always-lock on rescan 2026-07-14 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1257,24 +1257,37 @@
                         const name = meta.name || '';
                         if (!name.toLowerCase().includes('disclaimer')) return;
 
-                        // Entry number comes ONLY from the leading digits of the entrant folder name.
-                        // The entrant folder is always "554 [whatever name]" — only the number matters.
-                        // We scan ALL path segments (excluding the filename at the end) to find the one
-                        // that starts with digits — this works even if the PDF is in a subfolder.
+                        // Entry number comes from the leading digits of the entrant folder name.
+                        // Strategy: find the segment immediately after "02. Entrants" in the path —
+                        // that is always the entrant folder regardless of naming format.
+                        // This handles: "99 Jane Smith", "99. Jane Smith", "99-Jane", "99_Name", etc.
+                        // Fallback: scan all path segments (deepest first) for any that start with digits.
                         const path = meta.path_display || meta.path_lower || '';
                         const pathParts = path.split('/').filter(Boolean);
                         console.log(`  🗂 Raw path: ${path}`);
 
-                        // All segments except the last (filename), searched from deepest upward.
-                        // Require digits FOLLOWED BY A SPACE — this matches entrant folders like
-                        // "554 John Smith" or "51 Laszlo Bachmayer" but NOT "02. Entrants" or
-                        // "01. Documents" which start with digits followed by a dot.
-                        const segments = pathParts.slice(0, -1);
                         let entryId = '';
                         let matchedFolder = '';
-                        for (let i = segments.length - 1; i >= 0; i--) {
-                            const m = segments[i].match(/^(\d+)\s/);
-                            if (m) { entryId = m[1]; matchedFolder = segments[i]; break; }
+
+                        // Primary: look for segment right after the entrants folder
+                        const entrantsIdx = pathParts.findIndex(p => /entrants/i.test(p));
+                        if (entrantsIdx >= 0 && entrantsIdx + 1 < pathParts.length) {
+                            const candidate = pathParts[entrantsIdx + 1];
+                            // Don't use it if it's the filename (last element)
+                            if (entrantsIdx + 1 < pathParts.length - 1 || pathParts.length === entrantsIdx + 2) {
+                                const m = candidate.match(/^(\d+)/);
+                                if (m) { entryId = m[1]; matchedFolder = candidate; }
+                            }
+                        }
+
+                        // Fallback: scan all non-filename segments deepest-first
+                        // Require digit(s) followed by a space to avoid matching "02. Entrants"
+                        if (!entryId) {
+                            const segments = pathParts.slice(0, -1);
+                            for (let i = segments.length - 1; i >= 0; i--) {
+                                const m = segments[i].match(/^(\d+)\s/);
+                                if (m) { entryId = m[1]; matchedFolder = segments[i]; break; }
+                            }
                         }
 
                         if (entryId) {
@@ -1298,12 +1311,14 @@
 
                     if (!disclaimerChecked[entryId]) {
                         disclaimerChecked[entryId] = true;
-                        disclaimerLocked[entryId] = true;
                         newlyVerified++;
-                        console.log(`  ✓ Entry ${entryId} marked as verified`);
+                        console.log(`  ✓ Entry ${entryId} newly verified`);
                     } else {
                         alreadyVerified++;
+                        console.log(`  ✓ Entry ${entryId} already checked — locking`);
                     }
+                    // Always lock when the file is confirmed in Dropbox
+                    disclaimerLocked[entryId] = true;
                 });
 
                 saveToStorage();
