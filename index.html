@@ -4582,11 +4582,56 @@
                 });
                 const cnExportWs = XLSX.utils.aoa_to_sheet(cnExportData);
                 XLSX.utils.book_append_sheet(wb, cnExportWs, 'Car Numbers');
-                // ===== SHEET 7: Raw Data (Last) =====
-
+                // ===== SHEET 7: Raw Data =====
                 const rawDataRows = [csvHeaders, ...csvData];
                 const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
                 XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
+
+                // ===== SHEET 8: MA Licence Checks =====
+                {
+                    const licHoldsIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
+                    const licNumIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+                    const licTypeIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
+                    const licExpiryIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
+                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Licence Type', 'Expiry']];
+                    sortedIndices.forEach(idx => {
+                        const row = csvData[idx];
+                        const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                        if (!entryId || withdrawn.has(entryId)) return;
+                        const holds = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
+                        if (!holds.toLowerCase().startsWith('yes')) return;
+                        const firstName  = firstNameIdx >= 0 ? (row[firstNameIdx] || '').trim() : '';
+                        const lastName   = lastNameIdx  >= 0 ? (row[lastNameIdx]  || '').trim() : '';
+                        const name       = [firstName, lastName].filter(Boolean).join(' ');
+                        const entryType  = entryTypeIdx >= 0 ? (row[entryTypeIdx] || '').trim() : '';
+                        const category   = getCategory(row, categoryIdxs);
+                        const licNum     = licNumIdx    >= 0 ? (row[licNumIdx]    || '').trim() : '';
+                        const licType    = licTypeIdx   >= 0 ? (row[licTypeIdx]   || '').trim() : '';
+                        const licExpiry  = licExpiryIdx >= 0 ? (row[licExpiryIdx] || '').trim() : '';
+                        maChecksData.push([entryId, name, entryType, category, licNum, licType, licExpiry]);
+                    });
+                    const maChecksWs = XLSX.utils.aoa_to_sheet(maChecksData);
+                    XLSX.utils.book_append_sheet(wb, maChecksWs, 'MA Licence Checks');
+                }
+
+                // ===== SHEET 9: MA Licence CSV (Licence # + Last Name, no headers) =====
+                {
+                    const licHoldsIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
+                    const licNumIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+                    const maLicCsvData = [];
+                    sortedIndices.forEach(idx => {
+                        const row = csvData[idx];
+                        const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                        if (!entryId || withdrawn.has(entryId)) return;
+                        const holds = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
+                        if (!holds.toLowerCase().startsWith('yes')) return;
+                        const licNum   = licNumIdx   >= 0 ? (row[licNumIdx]   || '').trim() : '';
+                        const lastName = lastNameIdx >= 0 ? (row[lastNameIdx] || '').trim() : '';
+                        maLicCsvData.push([licNum, lastName]);
+                    });
+                    const maLicCsvWs = XLSX.utils.aoa_to_sheet(maLicCsvData);
+                    XLSX.utils.book_append_sheet(wb, maLicCsvWs, 'MA Licence CSV');
+                }
                 // Add workbook properties to mark file as trusted
                 wb.Props = {
                     Title: 'Adelaide Rally Entry Data',
