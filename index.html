@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.39 - DocuSign scan: robust folder matching; fix always-lock on rescan 2026-07-14 -->
+<!-- Adelaide Rally 2026 Dashboard v3.40 - DocuSign scan: fix entryIdIdx not found in CSV match step 2026-07-14 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1302,11 +1302,15 @@
                 console.log(`✓ Scan complete: ${verifiedEntryIds.size} signed entries found:`, [...verifiedEntryIds].sort((a,b) => Number(a) - Number(b)));
 
                 // Match against CSV and lock verified entries
+                // Compute entryIdIdx locally — do NOT rely on the global which may be stale or -1
+                const csvEntryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                console.log(`  🔑 Entry ID column index: ${csvEntryIdIdx}, CSV rows: ${csvData.length}`);
+
                 let newlyVerified = 0;
                 let alreadyVerified = 0;
 
                 csvData.forEach(row => {
-                    const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                    const entryId = csvEntryIdIdx >= 0 ? (row[csvEntryIdIdx] || '').trim() : '';
                     if (!entryId || !verifiedEntryIds.has(entryId)) return;
 
                     if (!disclaimerChecked[entryId]) {
