@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.36 - Missing MA Licence filter; Hide Complete requires all 4 checkboxes 2026-07-14 -->
+<!-- Adelaide Rally 2026 Dashboard v3.37 - MA Checks expiry editable input; auto-filled from PDF report 2026-07-14 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1125,6 +1125,7 @@
         let withdrawn = new Set(); // Track withdrawn entrant indices
         let maLicenceVerification = {}; // {[licNum]: {section, name, licences, best}} — from MA Verification Report PDF
         let maLicenceChecked = {};      // {[entryId]: true/false} — manual or auto MA Licence checkbox on dashboard
+        let maExpiryOverride = {};      // {[entryId]: 'dd/mm/yyyy'} — manually entered expiry dates on MA Checks tab
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
@@ -1342,6 +1343,7 @@
                     withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                     maLicenceVerification = data.maLicenceVerification || {};
                     maLicenceChecked = data.maLicenceChecked || {};
+                    maExpiryOverride = data.maExpiryOverride || {};
                     if (csvData.length > 0) {
                         document.getElementById('navBar').style.display = 'flex';
                         console.log('✓ Loaded embedded data with ' + csvData.length + ' entries');
@@ -2360,11 +2362,12 @@
                 const verData = licenceNum ? maLicenceVerification[licenceNum] : null;
 
                 // Determine display values and MA status
-                let displayType   = csvType;
-                let displayExpiry = csvExpiry;
-                let maStatus      = '';
-                let maStatusStyle = '';
-                let statusActive  = false;
+                let displayType     = csvType;
+                let displayExpiry   = maExpiryOverride[entryId] || csvExpiry; // manual override > CSV
+                let expiryFromPDF   = false; // true when expiry was auto-populated from verification report
+                let maStatus        = '';
+                let maStatusStyle   = '';
+                let statusActive    = false;
 
                 if (verData) {
                     matched++;
@@ -2379,7 +2382,10 @@
                         const best = verData.best;
                         if (best) {
                             displayType   = best.type;
-                            displayExpiry = best.expiry;
+                            if (best.expiry) {
+                                displayExpiry = best.expiry;
+                                expiryFromPDF = true;
+                            }
                             statusActive  = (best.status || '').toLowerCase() === 'active';
                             if (statusActive && sec === 'validMembership') {
                                 maStatus = '✓ Valid';
@@ -2433,14 +2439,44 @@
                     tr.style.color = '#991B1B';
                 }
 
-                const cells = [entryId, fullName, entrantType, category, licenceNum, displayType, displayExpiry || '⚠ Missing'];
-                cells.forEach((val, i) => {
+                // Columns 0–5: entry id, name, type, category, licence#, licence type
+                const cells = [entryId, fullName, entrantType, category, licenceNum, displayType];
+                cells.forEach(val => {
                     const td = document.createElement('td');
                     td.textContent = val;
                     td.style.padding = '8px';
-                    if (i === 6 && isExpired && !verData) td.style.fontWeight = '600';
                     tr.appendChild(td);
                 });
+
+                // Column 6: Expiry — locked if from PDF, editable input otherwise
+                const tdExpiry = document.createElement('td');
+                tdExpiry.style.padding = '4px 8px';
+                if (expiryFromPDF) {
+                    // Auto-populated from verification report — display as locked
+                    tdExpiry.innerHTML =
+                        `<span style="font-size:13px;">${displayExpiry}</span>` +
+                        `<div style="font-size:9px;color:#6b7280;font-style:italic;margin-top:1px;">📋 from report</div>`;
+                } else {
+                    // Manual input
+                    const inp = document.createElement('input');
+                    inp.type = 'text';
+                    inp.value = displayExpiry || '';
+                    inp.placeholder = 'dd/mm/yyyy';
+                    inp.title = 'Enter expiry date manually';
+                    inp.style.cssText = 'width:90px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:' + (isExpired ? '#FEF2F2' : '#fff') + ';';
+                    inp.addEventListener('change', (e) => {
+                        const val = e.target.value.trim();
+                        if (val) {
+                            maExpiryOverride[entryId] = val;
+                        } else {
+                            delete maExpiryOverride[entryId];
+                        }
+                        saveToStorage();
+                        renderMALicenceChecks();
+                    });
+                    tdExpiry.appendChild(inp);
+                }
+                tr.appendChild(tdExpiry);
 
                 // MA Status column
                 const tdStatus = document.createElement('td');
@@ -3429,6 +3465,7 @@
                         disclaimerLocked = data.disclaimerLocked || {};
                         maLicenceVerification = data.maLicenceVerification || {};
                         maLicenceChecked = data.maLicenceChecked || {};
+                        maExpiryOverride = data.maExpiryOverride || {};
                         saveToStorage();
                         // Update UI
                         if (csvData.length > 0) {
@@ -3533,6 +3570,7 @@
                 manualNavMatches,
                 maLicenceVerification,
                 maLicenceChecked,
+                maExpiryOverride,
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
@@ -3558,6 +3596,7 @@
                     manualNavMatches = data.manualNavMatches || [];
                     maLicenceVerification = data.maLicenceVerification || {};
                     maLicenceChecked = data.maLicenceChecked || {};
+                    maExpiryOverride = data.maExpiryOverride || {};
                     // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
                     lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
@@ -3825,6 +3864,7 @@
                     manualNavMatches: manualNavMatches,
                     maLicenceVerification: maLicenceVerification,
                     maLicenceChecked: maLicenceChecked,
+                    maExpiryOverride: maExpiryOverride,
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
                 };
@@ -4075,6 +4115,15 @@
                         }
                     }
 
+                    // Merge maExpiryOverride: union, local wins on conflict
+                    if (remoteState.maExpiryOverride && typeof remoteState.maExpiryOverride === 'object') {
+                        const merged = { ...remoteState.maExpiryOverride, ...maExpiryOverride };
+                        if (JSON.stringify(merged) !== JSON.stringify(maExpiryOverride)) {
+                            maExpiryOverride = merged;
+                            stateUpdated = true;
+                        }
+                    }
+
                     if (hasChanges || stateUpdated) {
                         console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
                         lastSyncTimestamp = Date.now();
@@ -4114,6 +4163,7 @@
                 withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
                 maLicenceVerification = data.maLicenceVerification || {};
                 maLicenceChecked = data.maLicenceChecked || {};
+                maExpiryOverride = data.maExpiryOverride || {};
                 lastSyncTimestamp = data.timestamp || 0;
                 console.log('✓ Loaded state from Dropbox');
                 if (csvData.length > 0) {
