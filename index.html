@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.35 - MA Licence checkbox on dashboard; MA Checks tab fix 2026-07-14 -->
+<!-- Adelaide Rally 2026 Dashboard v3.36 - Missing MA Licence filter; Hide Complete requires all 4 checkboxes 2026-07-14 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -740,6 +740,10 @@
                 <div class="stat-chip" id="outstandingPaymentBtn" onclick="filterByOutstandingPayment()" style="cursor: pointer;">
                     <div class="num" id="docOutstandingPayment">0</div>
                     <div class="lbl">Outstanding Payment</div>
+                </div>
+                <div class="stat-chip" id="missingMALicenceBtn" onclick="filterByMissing('maLicence')" style="cursor: pointer;">
+                    <div class="num" id="docMissingMALicence">0</div>
+                    <div class="lbl">Missing MA Licence</div>
                 </div>
                 <div class="stat-chip" id="hideCompleteBtn" onclick="filterByComplete()" style="cursor: pointer;">
                     <div class="num" id="docComplete">0</div>
@@ -2007,11 +2011,11 @@
                 if (docVerified[idx]) {
                     tr.classList.add('row-checked');
                 }
-                // Check if all three verification items are complete
+                // Check if all four verification items are complete
                 const disclaimerOk = disclaimerChecked[entryId] === true;
                 const photoIdOk = photoIdVerified[entryId] === true;
                 const paymentOk = !paymentAmount || !paymentAmount.trim();
-                if (disclaimerOk && photoIdOk && paymentOk) {
+                if (disclaimerOk && photoIdOk && paymentOk && maLicenceChecked[entryId]) {
                     // Make the name cell green to indicate all info is complete
                     const nameCell = tr.children[1]; // Second cell is the name
                     if (nameCell) {
@@ -2165,25 +2169,26 @@
                 }
                 // Apply missing disclaimer filter - show ONLY entries missing disclaimer check
                 if (filterMissing === 'disclaimer') {
-                    // Show only entries that don't have disclaimer checked
                     shouldShow = !disclaimerChecked[entryId];
+                }
+                // Apply missing MA Licence filter - show ONLY entries without MA Licence ticked
+                if (filterMissing === 'maLicence') {
+                    shouldShow = !maLicenceChecked[entryId];
                 }
                 // Apply outstanding payment filter - show ONLY entries with outstanding payments
                 if (filterOutstandingPayment) {
                     const paymentAmount = paymentAmountIdx >= 0 ? row[paymentAmountIdx] : '';
                     const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount.trim()) : 0;
                     const paymentCompleted = paymentCompletedIdx >= 0 ? (row[paymentCompletedIdx] || '').toLowerCase().trim() : '';
-                    // Show entries where Payment Completed = "no" AND Payment Amount > 0
                     shouldShow = paymentCompleted === 'no' && paymentAmountNum > 0;
                 }
-                // Apply hide complete filter - hide entries that are complete (all three requirements met)
+                // Apply hide complete filter - hide entries that have ALL 4 checkboxes ticked
                 if (filterComplete) {
                     const paymentAmount = paymentAmountIdx >= 0 ? row[paymentAmountIdx] : '';
                     const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount.trim()) : 0;
                     const paymentCompleted = paymentCompletedIdx >= 0 ? (row[paymentCompletedIdx] || '').toLowerCase().trim() : '';
                     const isPaymentComplete = paymentAmountNum === 0 || paymentCompleted === 'yes';
-                    // Hide entries that have disclaimer, photo ID, and payment complete
-                    const isComplete = disclaimerChecked[entryId] && photoIdVerified[entryId] && isPaymentComplete;
+                    const isComplete = disclaimerChecked[entryId] && photoIdVerified[entryId] && isPaymentComplete && maLicenceChecked[entryId];
                     shouldShow = !isComplete;
                 }
                 rows[visibleRowIndex].style.display = (shouldShow && matchesSearch) ? '' : 'none';
@@ -2215,7 +2220,7 @@
             if (rowIndex >= 0 && bodyRows[rowIndex]) {
                 const nameCell = bodyRows[rowIndex].children[1];
                 if (nameCell) {
-                    if (disclaimerOk && photoIdOk && paymentOk) {
+                    if (disclaimerOk && photoIdOk && paymentOk && maLicenceChecked[entryId]) {
                         nameCell.style.color = '#22C55E';
                         nameCell.style.fontWeight = '600';
                     } else {
@@ -2230,6 +2235,7 @@
             let total = 0;
             let missingPhotoId = 0;
             let missingDisclaimer = 0;
+            let missingMALicence = 0;
             let outstandingPayment = 0;
             let complete = 0;
             const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
@@ -2260,8 +2266,12 @@
                 if (!isPaymentComplete) {
                     outstandingPayment++;
                 }
-                // Count complete entries - have disclaimer, photo ID, and payment complete
-                if (disclaimerChecked[entryId] && photoIdVerified[entryId] && isPaymentComplete) {
+                // Count missing MA Licence - entries WITHOUT the MA Licence checkbox ticked
+                if (!maLicenceChecked[entryId]) {
+                    missingMALicence++;
+                }
+                // Count complete entries - all 4 checkboxes: disclaimer, photo ID, payment, MA Licence
+                if (disclaimerChecked[entryId] && photoIdVerified[entryId] && isPaymentComplete && maLicenceChecked[entryId]) {
                     complete++;
                 }
             });
@@ -2269,6 +2279,7 @@
             document.getElementById('docMissingPhotoId').textContent = missingPhotoId;
             document.getElementById('docMissingDisclaimer').textContent = missingDisclaimer;
             document.getElementById('docOutstandingPayment').textContent = outstandingPayment;
+            document.getElementById('docMissingMALicence').textContent = missingMALicence;
             document.getElementById('docComplete').textContent = complete;
         }
         function renderMALicenceChecks() {
@@ -3307,6 +3318,7 @@
             // Update button styles
             document.getElementById('missingPhotoIdBtn').classList.toggle('active', filterMissing === 'photoId');
             document.getElementById('missingDisclaimerBtn').classList.toggle('active', filterMissing === 'disclaimer');
+            document.getElementById('missingMALicenceBtn').classList.toggle('active', filterMissing === 'maLicence');
             document.getElementById('outstandingPaymentBtn').classList.toggle('active', false);
             document.getElementById('hideCompleteBtn').classList.toggle('active', false);
             document.getElementById('totalBtn').classList.toggle('active', filterMissing === null);
@@ -3327,6 +3339,7 @@
             document.getElementById('outstandingPaymentBtn').classList.toggle('active', filterOutstandingPayment);
             document.getElementById('missingPhotoIdBtn').classList.toggle('active', false);
             document.getElementById('missingDisclaimerBtn').classList.toggle('active', false);
+            document.getElementById('missingMALicenceBtn').classList.toggle('active', false);
             document.getElementById('hideCompleteBtn').classList.toggle('active', false);
             document.getElementById('totalBtn').classList.toggle('active', !filterOutstandingPayment);
             // Apply the filter
@@ -3346,6 +3359,7 @@
             document.getElementById('hideCompleteBtn').classList.toggle('active', filterComplete);
             document.getElementById('missingPhotoIdBtn').classList.toggle('active', false);
             document.getElementById('missingDisclaimerBtn').classList.toggle('active', false);
+            document.getElementById('missingMALicenceBtn').classList.toggle('active', false);
             document.getElementById('outstandingPaymentBtn').classList.toggle('active', false);
             document.getElementById('totalBtn').classList.toggle('active', !filterComplete);
             // Apply the filter
@@ -3360,6 +3374,7 @@
             document.getElementById('totalBtn').classList.add('active');
             document.getElementById('missingPhotoIdBtn').classList.remove('active');
             document.getElementById('missingDisclaimerBtn').classList.remove('active');
+            document.getElementById('missingMALicenceBtn').classList.remove('active');
             document.getElementById('outstandingPaymentBtn').classList.remove('active');
             document.getElementById('hideCompleteBtn').classList.remove('active');
             // Apply the filter
