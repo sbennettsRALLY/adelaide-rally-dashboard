@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.19 - Disclaimer list_folder uses full path without namespace header 2026-07-08 -->
+<!-- Adelaide Rally 2026 Dashboard v3.33 - MA Licence Verification Report PDF upload & parse 2026-07-14 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -786,6 +786,12 @@
             <div class="filters">
                 <input type="text" id="maChecksSearch" class="fins" placeholder="Search by name, entry #, licence number..." />
             </div>
+            <div class="filters" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
+                <input type="file" id="maVerificationPDF" accept=".pdf" style="display:none;" onchange="handleVerificationPDFUpload(event)" />
+                <button class="btn-reset" onclick="document.getElementById('maVerificationPDF').click()">📋 Upload MA Verification Report</button>
+                <button class="btn-reset" id="maVerifyClearBtn" onclick="clearMAVerification()" style="display:none;background:#dc2626;">✕ Clear Verification</button>
+                <span id="maVerifyStatus" style="font-size:12px;color:var(--muted);"></span>
+            </div>
             <div class="stat-row">
                 <div class="stat-chip no-click">
                     <div class="num" id="maChecksTotal">0</div>
@@ -794,6 +800,10 @@
                 <div class="stat-chip no-click" style="background: #FEF3C7;">
                     <div class="num" id="maChecksExpired">0</div>
                     <div class="lbl">Expired / Missing Expiry</div>
+                </div>
+                <div class="stat-chip no-click" style="background: #E8F5E9;">
+                    <div class="num" id="maChecksVerified">0</div>
+                    <div class="lbl">MA Report Matched</div>
                 </div>
             </div>
             <div class="tbl-wrap">
@@ -807,6 +817,7 @@
                             <th>Licence #</th>
                             <th>Licence Type</th>
                             <th>Expiry</th>
+                            <th>MA Status</th>
                         </tr>
                     </thead>
                     <tbody id="maChecksBody"></tbody>
@@ -1093,6 +1104,7 @@
         Adelaide Rally Entry Management System | Data synced to Dropbox
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         // Detect if opened in SharePoint preview (iframe) and open in new window
         if (window.self !== window.top) {
@@ -1107,6 +1119,7 @@
         let disclaimerChecked = {}; // Track which entries have disclaimer checked (auto or manual)
         let disclaimerLocked = {}; // Track which entries are locked (found via Dropbox verification)
         let withdrawn = new Set(); // Track withdrawn entrant indices
+        let maLicenceVerification = {}; // {[licNum]: {section, name, licences, best}} — from MA Verification Report PDF
         let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
@@ -1322,6 +1335,7 @@
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
                     withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
+                    maLicenceVerification = data.maLicenceVerification || {};
                     if (csvData.length > 0) {
                         document.getElementById('navBar').style.display = 'flex';
                         console.log('✓ Loaded embedded data with ' + csvData.length + ' entries');
@@ -2237,26 +2251,35 @@
             const noData = document.getElementById('maChecksNoData');
             const table = document.getElementById('maChecksTable');
             tbody.innerHTML = '';
+            const hasVerif = Object.keys(maLicenceVerification).length > 0;
+
+            // Show / hide the Clear Verification button and status text
+            const clearBtn = document.getElementById('maVerifyClearBtn');
+            const verifStatus = document.getElementById('maVerifyStatus');
+            if (clearBtn) clearBtn.style.display = hasVerif ? '' : 'none';
+            if (verifStatus && !hasVerif) verifStatus.textContent = '';
+
             if (csvData.length === 0) {
                 noData.style.display = 'block';
                 table.style.display = 'none';
                 document.getElementById('maChecksTotal').textContent = '0';
                 document.getElementById('maChecksExpired').textContent = '0';
+                document.getElementById('maChecksVerified').textContent = '0';
                 return;
             }
             noData.style.display = 'none';
             table.style.display = 'table';
 
             // Column indices
-            const entryIdIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-            const firstNameIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
-            const lastNameIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
-            const mainTypeIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const entryIdIdx      = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const firstNameIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lastNameIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const mainTypeIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
             const licenceHoldsIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
-            const licenceNumIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
-            const licenceTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
+            const licenceNumIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+            const licenceTypeIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
             const licenceExpiryIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
-            const categoryIdxs  = csvHeaders
+            const categoryIdxs    = csvHeaders
                 .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
                 .filter(i => i >= 0);
 
@@ -2272,51 +2295,96 @@
                     return nA - nB;
                 });
 
-            let total = 0, expired = 0;
+            let total = 0, expired = 0, matched = 0;
             sortedIndices.forEach(idx => {
                 const row = csvData[idx];
                 const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                 if (!entryId) return;
                 if (withdrawn.has(entryId)) return;
 
-                // Only show entrants who already hold a valid MA licence (answered Yes)
+                // Extract licence number early — needed for the filter below
+                const licenceNum  = licenceNumIdx >= 0   ? (row[licenceNumIdx] || '').trim()   : '';
+
+                // Show entrants who answered "Yes" to holding an MA licence,
+                // OR who have entered a licence number regardless of their answer
+                // (some entrants answer "No" but still provide their existing number)
                 const holdsLicence = licenceHoldsIdx >= 0 ? (row[licenceHoldsIdx] || '').trim() : '';
-                if (!holdsLicence.toLowerCase().startsWith('yes')) return;
+                const answeredYes  = holdsLicence.toLowerCase().startsWith('yes');
+                if (!answeredYes && !licenceNum) return;
 
                 const firstName   = firstNameIdx >= 0  ? (row[firstNameIdx] || '').trim()  : '';
                 const lastName    = lastNameIdx >= 0   ? (row[lastNameIdx] || '').trim()   : '';
                 const fullName    = [firstName, lastName].filter(Boolean).join(' ') || entryId;
                 const entrantType = mainTypeIdx >= 0   ? (row[mainTypeIdx] || '').trim()   : '';
                 const category    = getCategory(row, categoryIdxs);
-                const licenceNum  = licenceNumIdx >= 0  ? (row[licenceNumIdx] || '').trim()  : '';
-                const licenceType = licenceTypeIdx >= 0 ? (row[licenceTypeIdx] || '').trim() : '';
-                const licenceExpiry = licenceExpiryIdx >= 0 ? (row[licenceExpiryIdx] || '').trim() : '';
+                const csvType     = licenceTypeIdx >= 0  ? (row[licenceTypeIdx] || '').trim()  : '';
+                const csvExpiry   = licenceExpiryIdx >= 0 ? (row[licenceExpiryIdx] || '').trim() : '';
 
-                // Search filter
-                const searchable = [entryId, fullName, licenceNum, licenceType].join(' ').toLowerCase();
-                if (searchTerm && !searchable.includes(searchTerm)) return;
+                // Look up MA verification data for this licence number
+                const verData = licenceNum ? maLicenceVerification[licenceNum] : null;
 
-                // Determine if licence is expired or expiry is missing
-                let isExpired = false;
-                if (!licenceExpiry) {
-                    isExpired = true;
-                } else {
-                    // Parse common date formats (dd/mm/yyyy or yyyy-mm-dd or dd-mm-yyyy)
-                    let expDate = null;
-                    const parts = licenceExpiry.split(/[\/\-\.]/);
-                    if (parts.length === 3) {
-                        if (parts[0].length === 4) {
-                            // yyyy-mm-dd
-                            expDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                // Determine display values and MA status
+                let displayType   = csvType;
+                let displayExpiry = csvExpiry;
+                let maStatus      = '';
+                let maStatusStyle = '';
+                let statusActive  = false;
+
+                if (verData) {
+                    matched++;
+                    const sec = verData.section;
+                    if (sec === 'matchNotFound') {
+                        maStatus = '✗ Not Found';
+                        maStatusStyle = 'color:#991B1B;font-weight:700;';
+                    } else if (sec === 'noMembershipData') {
+                        maStatus = '✗ No Data';
+                        maStatusStyle = 'color:#991B1B;font-weight:700;';
+                    } else {
+                        const best = verData.best;
+                        if (best) {
+                            displayType   = best.type;
+                            displayExpiry = best.expiry;
+                            statusActive  = (best.status || '').toLowerCase() === 'active';
+                            if (statusActive && sec === 'validMembership') {
+                                maStatus = '✓ Valid';
+                                maStatusStyle = 'color:#155724;font-weight:700;';
+                            } else if (sec === 'reviewMembership') {
+                                maStatus = statusActive ? '⚠ Review' : '✗ Expired';
+                                maStatusStyle = statusActive ? 'color:#7B5900;font-weight:700;' : 'color:#991B1B;font-weight:700;';
+                            } else {
+                                // validMembership but best licence not active
+                                maStatus = '✗ Expired';
+                                maStatusStyle = 'color:#991B1B;font-weight:700;';
+                            }
                         } else {
-                            // dd/mm/yyyy or dd-mm-yyyy
-                            expDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                            maStatus = sec === 'reviewMembership' ? '⚠ Review' : '✓ Valid';
+                            maStatusStyle = sec === 'reviewMembership' ? 'color:#7B5900;font-weight:700;' : 'color:#155724;font-weight:700;';
                         }
                     }
-                    if (expDate && !isNaN(expDate)) {
-                        isExpired = expDate < today;
+                }
+
+                // Search filter
+                const searchable = [entryId, fullName, licenceNum, displayType, maStatus].join(' ').toLowerCase();
+                if (searchTerm && !searchable.includes(searchTerm)) return;
+
+                // Determine expired status
+                let isExpired = false;
+                if (verData) {
+                    // Trust the MA report: expired if not found / no data / licence not active
+                    isExpired = !statusActive || verData.section === 'matchNotFound' || verData.section === 'noMembershipData';
+                } else {
+                    // Fall back to parsing the CSV expiry date
+                    if (!displayExpiry) {
+                        isExpired = true;
                     } else {
-                        isExpired = true; // unparseable — flag it
+                        let expDate = null;
+                        const parts = displayExpiry.split(/[\/\-\.]/);
+                        if (parts.length === 3) {
+                            expDate = parts[0].length === 4
+                                ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+                                : new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                        }
+                        isExpired = !expDate || isNaN(expDate) || expDate < today;
                     }
                 }
 
@@ -2329,20 +2397,210 @@
                     tr.style.color = '#991B1B';
                 }
 
-                const cells = [entryId, fullName, entrantType, category, licenceNum, licenceType, licenceExpiry || '⚠ Missing'];
+                const cells = [entryId, fullName, entrantType, category, licenceNum, displayType, displayExpiry || '⚠ Missing'];
                 cells.forEach((val, i) => {
                     const td = document.createElement('td');
                     td.textContent = val;
                     td.style.padding = '8px';
-                    if (i === 6 && isExpired) td.style.fontWeight = '600';
+                    if (i === 6 && isExpired && !verData) td.style.fontWeight = '600';
                     tr.appendChild(td);
                 });
+
+                // MA Status column
+                const tdStatus = document.createElement('td');
+                tdStatus.textContent = maStatus;
+                tdStatus.style.cssText = 'padding:8px;' + maStatusStyle;
+                tr.appendChild(tdStatus);
+
                 tbody.appendChild(tr);
             });
 
             document.getElementById('maChecksTotal').textContent = total;
             document.getElementById('maChecksExpired').textContent = expired;
+            document.getElementById('maChecksVerified').textContent = matched;
         }
+
+        // ─── MA Licence Verification — PDF upload & parse ────────────────────────
+        async function handleVerificationPDFUpload(event) {
+            const file = event.target.files[0];
+            event.target.value = ''; // reset so the same file can be re-uploaded
+            if (!file) return;
+            showMessage('maChecksMsg', 'ok', '⏳ Parsing MA Verification Report…');
+            try {
+                await parseAndApplyVerificationPDF(file);
+            } catch (e) {
+                console.error('MA PDF parse error:', e);
+                showMessage('maChecksMsg', 'error', '❌ Failed to parse PDF: ' + e.message);
+            }
+        }
+
+        function clearMAVerification() {
+            if (!confirm('Clear all MA verification data from the uploaded report?')) return;
+            maLicenceVerification = {};
+            saveToStorage();
+            renderMALicenceChecks();
+            showMessage('maChecksMsg', 'ok', '✓ Verification data cleared.');
+        }
+
+        async function parseAndApplyVerificationPDF(file) {
+            // PDF.js is loaded via CDN; its global is window['pdfjs-dist/build/pdf']
+            const pdfjsLib = window['pdfjs-dist/build/pdf'];
+            if (!pdfjsLib) throw new Error('PDF library (pdf.js) not loaded — check internet connection.');
+
+            // Set worker source to matching CDN version
+            if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc =
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            }
+
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+
+            // Extract text, preserving visual line order
+            const allLines = [];
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const content = await page.getTextContent();
+
+                // Group text items by Y coordinate (±4 px tolerance = same line)
+                const yGroups = new Map();
+                for (const item of content.items) {
+                    if (!item.str || !item.str.trim()) continue;
+                    const y = Math.round(item.transform[5] / 4) * 4;
+                    if (!yGroups.has(y)) yGroups.set(y, []);
+                    yGroups.get(y).push({ x: item.transform[4], str: item.str });
+                }
+
+                // Sort: Y descending (top→bottom), X ascending (left→right)
+                const ys = [...yGroups.keys()].sort((a, b) => b - a);
+                for (const y of ys) {
+                    const line = yGroups.get(y)
+                        .sort((a, b) => a.x - b.x)
+                        .map(i => i.str)
+                        .join(' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    if (line) allLines.push(line);
+                }
+            }
+
+            const verMap = _maVerifParseLines(allLines);
+            const totalFound = Object.keys(verMap).length;
+            if (totalFound === 0) throw new Error('No licence records found — ensure this is an MA Membership Verification Report.');
+
+            maLicenceVerification = verMap;
+            saveToStorage();
+            renderMALicenceChecks();
+
+            const validCnt    = Object.values(verMap).filter(v => v.section === 'validMembership' && v.best && v.best.status.toLowerCase() === 'active').length;
+            const reviewCnt   = Object.values(verMap).filter(v => v.section === 'reviewMembership').length;
+            const notFoundCnt = Object.values(verMap).filter(v => v.section === 'matchNotFound' || v.section === 'noMembershipData').length;
+            const verifStatus = document.getElementById('maVerifyStatus');
+            if (verifStatus) verifStatus.textContent = `Report loaded: ${totalFound} records`;
+            showMessage('maChecksMsg', 'ok',
+                `✓ Report parsed — ${totalFound} records: ${validCnt} valid, ${reviewCnt} under review, ${notFoundCnt} not found / no data`);
+        }
+
+        function _maVerifParseLines(lines) {
+            const SECTION_MAP = {
+                'match not found':    'matchNotFound',
+                'no membership data': 'noMembershipData',
+                'review membership':  'reviewMembership',
+                'valid membership':   'validMembership'
+            };
+            const result = {};           // { [licNum]: { section, name, licences, best } }
+            let currentSection = null;
+            let currentMember  = null;   // pointer into result[licNum]
+
+            // Member line: 4–8 digits, space-dash-space, then name
+            const MEMBER_RE = /^(\d{4,8})\s*-\s*(.+)$/;
+            // Date in a licence detail row: dd/mm/yyyy
+            const DATE_RE   = /(\d{2}\/\d{2}\/\d{4})/;
+
+            for (const line of lines) {
+                const lower = line.toLowerCase().trim();
+
+                // Section header?
+                if (SECTION_MAP[lower] !== undefined) {
+                    currentSection = SECTION_MAP[lower];
+                    currentMember  = null;
+                    continue;
+                }
+                if (!currentSection) continue;
+
+                // Skip table header lines and footer noise
+                if ((lower.startsWith('member') && lower.includes('expiry')) ||
+                    lower.startsWith('page ')  ||
+                    lower.includes('motorsport australia') ||
+                    lower.includes('powered by') ||
+                    lower.includes('verification report')) continue;
+
+                // Member entry line?
+                const memMatch = line.match(MEMBER_RE);
+                if (memMatch) {
+                    const licNum = memMatch[1].trim();
+                    const name   = memMatch[2].trim();
+                    result[licNum] = { section: currentSection, name, licences: [], best: null };
+                    // matchNotFound / noMembershipData have no detail rows
+                    currentMember = (currentSection === 'reviewMembership' || currentSection === 'validMembership')
+                        ? result[licNum] : null;
+                    continue;
+                }
+
+                // Licence detail row (contains dd/mm/yyyy)?
+                if (!currentMember) continue;
+                const dateMatch = line.match(DATE_RE);
+                if (!dateMatch) continue;
+
+                const expiry  = dateMatch[1];
+                const dateIdx = line.indexOf(expiry);
+                const before  = line.substring(0, dateIdx).trim();
+                const after   = line.substring(dateIdx + expiry.length).trim();
+
+                let status = 'Unknown';
+                const stMatch = after.match(/^(Active|Expired|Under Review)/i);
+                if (stMatch) status = stMatch[1];
+
+                currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status });
+            }
+
+            // Compute the "best" licence for each member
+            for (const entry of Object.values(result)) {
+                if (entry.licences.length > 0) entry.best = _maVerifBestLicence(entry.licences);
+            }
+            return result;
+        }
+
+        function _maVerifDedupeType(str) {
+            // "Rally Rally" → "Rally", "Tarmac Rally Endorsement Tarmac Rally Endorsement" → "Tarmac Rally Endorsement"
+            str = str.trim();
+            if (!str) return str;
+            const words = str.split(/\s+/);
+            const n = words.length;
+            if (n >= 2 && n % 2 === 0) {
+                const half   = n / 2;
+                const first  = words.slice(0, half).join(' ');
+                const second = words.slice(half).join(' ');
+                if (first.toLowerCase() === second.toLowerCase()) return first;
+            }
+            return str;
+        }
+
+        function _maVerifBestLicence(licences) {
+            // Prioritise: active Rally/Navigator > active Speed > any active > any expired rally > any
+            const score = lic => {
+                const t = (lic.type || '').toLowerCase();
+                const active = (lic.status || '').toLowerCase() === 'active';
+                let s = active ? 1000 : 0;
+                if ((t.includes('rally') || t.includes('navigator')) && !t.includes('endorsement')) s += 300;
+                else if (t.includes('speed') || t.includes('race')) s += 200;
+                else if (t.includes('tarmac')) s += 100;
+                else s += 10;
+                return s;
+            };
+            return [...licences].sort((a, b) => score(b) - score(a))[0];
+        }
+        // ─────────────────────────────────────────────────────────────────────────
 
         function renderNavMarryTable() {
             if (csvData.length === 0) {
@@ -3129,6 +3387,7 @@
                         photoIdVerified = data.photoIdVerified || {};
                         disclaimerChecked = data.disclaimerChecked || {};
                         disclaimerLocked = data.disclaimerLocked || {};
+                        maLicenceVerification = data.maLicenceVerification || {};
                         saveToStorage();
                         // Update UI
                         if (csvData.length > 0) {
@@ -3231,6 +3490,7 @@
                 carNumberAssignments,
                 customCarSlots,
                 manualNavMatches,
+                maLicenceVerification,
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
@@ -3254,6 +3514,7 @@
                     carNumberAssignments = data.carNumberAssignments || {};
                     customCarSlots = data.customCarSlots || [];
                     manualNavMatches = data.manualNavMatches || [];
+                    maLicenceVerification = data.maLicenceVerification || {};
                     // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
                     lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
@@ -3787,6 +4048,7 @@
                 disclaimerChecked = data.disclaimerChecked || {};
                 disclaimerLocked = data.disclaimerLocked || {};
                 withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
+                maLicenceVerification = data.maLicenceVerification || {};
                 lastSyncTimestamp = data.timestamp || 0;
                 console.log('✓ Loaded state from Dropbox');
                 if (csvData.length > 0) {
@@ -4593,22 +4855,38 @@
                     const licNumIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
                     const licTypeIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
                     const licExpiryIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
-                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Licence Type', 'Expiry']];
+                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Licence Type', 'Expiry', 'MA Status']];
                     sortedIndices.forEach(idx => {
                         const row = csvData[idx];
                         const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                         if (!entryId || withdrawn.has(entryId)) return;
-                        const holds = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
-                        if (!holds.toLowerCase().startsWith('yes')) return;
+                        // Include if answered "Yes" OR if they provided a licence number
+                        const licNum   = licNumIdx  >= 0 ? (row[licNumIdx]  || '').trim() : '';
+                        const holds    = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
+                        if (!holds.toLowerCase().startsWith('yes') && !licNum) return;
                         const firstName  = firstNameIdx >= 0 ? (row[firstNameIdx] || '').trim() : '';
                         const lastName   = lastNameIdx  >= 0 ? (row[lastNameIdx]  || '').trim() : '';
                         const name       = [firstName, lastName].filter(Boolean).join(' ');
                         const entryType  = entryTypeIdx >= 0 ? (row[entryTypeIdx] || '').trim() : '';
                         const category   = getCategory(row, categoryIdxs);
-                        const licNum     = licNumIdx    >= 0 ? (row[licNumIdx]    || '').trim() : '';
                         const licType    = licTypeIdx   >= 0 ? (row[licTypeIdx]   || '').trim() : '';
                         const licExpiry  = licExpiryIdx >= 0 ? (row[licExpiryIdx] || '').trim() : '';
-                        maChecksData.push([entryId, name, entryType, category, licNum, licType, licExpiry]);
+                        // Look up MA verification status
+                        const verData   = licNum ? maLicenceVerification[licNum] : null;
+                        let maStatus = '';
+                        let exportType = licType, exportExpiry = licExpiry;
+                        if (verData) {
+                            const sec = verData.section;
+                            if (sec === 'matchNotFound') { maStatus = 'Not Found'; }
+                            else if (sec === 'noMembershipData') { maStatus = 'No Data'; }
+                            else if (verData.best) {
+                                exportType   = verData.best.type;
+                                exportExpiry = verData.best.expiry;
+                                const active = (verData.best.status || '').toLowerCase() === 'active';
+                                maStatus = active ? (sec === 'validMembership' ? 'Valid' : 'Review') : 'Expired';
+                            }
+                        }
+                        maChecksData.push([entryId, name, entryType, category, licNum, exportType, exportExpiry, maStatus]);
                     });
                     const maChecksWs = XLSX.utils.aoa_to_sheet(maChecksData);
                     XLSX.utils.book_append_sheet(wb, maChecksWs, 'MA Licence Checks');
@@ -4623,9 +4901,11 @@
                         const row = csvData[idx];
                         const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                         if (!entryId || withdrawn.has(entryId)) return;
-                        const holds = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
-                        if (!holds.toLowerCase().startsWith('yes')) return;
-                        const licNum   = licNumIdx   >= 0 ? (row[licNumIdx]   || '').trim() : '';
+                        // Include if answered "Yes" OR if they provided a licence number
+                        const licNum = licNumIdx >= 0 ? (row[licNumIdx] || '').trim() : '';
+                        const holds  = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
+                        if (!holds.toLowerCase().startsWith('yes') && !licNum) return;
+                        if (!licNum) return; // No point including in CSV if there's no number to check
                         const lastName = lastNameIdx >= 0 ? (row[lastNameIdx] || '').trim() : '';
                         maLicCsvData.push([licNum, lastName]);
                     });
