@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.46 - MA Verification: prefer licence with valid expiry date over expired higher-tier 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.47 - MA Verification: require BOTH active status AND current expiry to be valid 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2414,7 +2414,19 @@
                         const best = verData.best;
                         if (best) {
                             // PDF data goes in the new MA Verified column — don't overwrite csvType/displayExpiry
-                            statusActive = (best.status || '').toLowerCase() === 'active';
+                            // Valid = BOTH active status AND a current (future) expiry date
+                            const bestIsActive = (best.status || '').toLowerCase() === 'active';
+                            let bestExpValid = false;
+                            if (best.expiry) {
+                                const bParts = best.expiry.split(/[\/\-\.]/);
+                                if (bParts.length === 3) {
+                                    const bExp = bParts[0].length === 4
+                                        ? new Date(parseInt(bParts[0]), parseInt(bParts[1]) - 1, parseInt(bParts[2]))
+                                        : new Date(parseInt(bParts[2]), parseInt(bParts[1]) - 1, parseInt(bParts[0]));
+                                    bestExpValid = bExp && !isNaN(bExp) && bExp >= today;
+                                }
+                            }
+                            statusActive = bestIsActive && bestExpValid;
                             if (statusActive && sec === 'validMembership') maStatus = '✓ Valid';
                             else if (sec === 'reviewMembership')           maStatus = statusActive ? '⚠ Review' : '✗ Expired';
                             else                                           maStatus = '✗ Expired';
@@ -2690,8 +2702,19 @@
                     if (!eid || !licNum) return;
                     const ver = verMap[licNum];
                     if (!ver || !ver.best) return;
+                    // Auto-tick only when BOTH active status AND current expiry date are confirmed
                     const isActive = (ver.best.status || '').toLowerCase() === 'active';
-                    if (ver.section === 'validMembership' && isActive) {
+                    let expValid = false;
+                    if (ver.best.expiry) {
+                        const ap = ver.best.expiry.split(/[\/\-\.]/);
+                        if (ap.length === 3) {
+                            const aExp = ap[0].length === 4
+                                ? new Date(parseInt(ap[0]), parseInt(ap[1]) - 1, parseInt(ap[2]))
+                                : new Date(parseInt(ap[2]), parseInt(ap[1]) - 1, parseInt(ap[0]));
+                            expValid = aExp && !isNaN(aExp) && aExp >= new Date(new Date().setHours(0,0,0,0));
+                        }
+                    }
+                    if (ver.section === 'validMembership' && isActive && expValid) {
                         maLicenceChecked[eid] = true;
                         maLicenceChecked[eid + '_locked'] = true;
                     }
@@ -2823,14 +2846,14 @@
                 return (d && !isNaN(d)) ? d : null;
             };
 
-            // Prioritise by: 1) future expiry date, 2) active status, 3) licence type
-            // A valid-dated Circuit will beat an expired Rally
+            // Prioritise by: 1) BOTH active status AND future expiry date (truly valid), 2) licence type
+            // Both conditions must be true — active status alone or valid date alone is not enough
             const score = lic => {
                 const t = (lic.type || '').toLowerCase();
                 const expDate = parseExpiry(lic.expiry);
                 const hasValidExpiry = expDate !== null && expDate >= today;
                 const isActive = (lic.status || '').toLowerCase() === 'active';
-                let s = hasValidExpiry ? 2000 : (isActive ? 1000 : 0);
+                let s = (hasValidExpiry && isActive) ? 2000 : 0;
                 if ((t.includes('rally') || t.includes('navigator')) && !t.includes('endorsement')) s += 300;
                 else if (t.includes('speed')) s += 200;
                 else if (t.includes('tarmac')) s += 150;
