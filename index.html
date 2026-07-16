@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.43 - MA Checks: fix missing entries bug + split MA columns into Type/Expiry 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.44 - MA Checks: clarify "no lic. data" status when PDF has no licence rows 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2423,8 +2423,9 @@
                             maStatus = '✗ Wrong Licence Type';
                             statusActive = false;
                         } else {
+                            // Found in report but no licence rows could be parsed from the PDF
                             statusActive = (sec !== 'reviewMembership');
-                            maStatus = sec === 'reviewMembership' ? '⚠ Review' : '✓ Valid';
+                            maStatus = sec === 'reviewMembership' ? '⚠ Review — no lic. data' : '✓ Valid — no lic. data';
                         }
                     }
                 }
@@ -2549,9 +2550,11 @@
                         ? `<span style="font-size:12px;">${b.expiry}</span>`
                         : '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 } else if (verData) {
-                    const col = (verData.section === 'matchNotFound' || verData.section === 'noMembershipData')
-                        ? '#6B7280' : '#B45309';
-                    tdVerifType.innerHTML = `<span style="font-size:11px;color:${col}">${maStatus}</span>`;
+                    // No best licence — show status text with colour matching meaning
+                    const typeCol = maStatus.startsWith('✓') ? '#15803D'
+                                  : maStatus.startsWith('⚠') ? '#B45309'
+                                  : '#6B7280';
+                    tdVerifType.innerHTML = `<span style="font-size:11px;color:${typeCol}">${maStatus}</span>`;
                     tdVerifExpiry.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 } else {
                     tdVerifType.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
