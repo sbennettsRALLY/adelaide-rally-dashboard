@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.42 - MA Checks: Entry Licence column + MA Verified Licence/Expiry column 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.43 - MA Checks: fix missing entries bug + split MA columns into Type/Expiry 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -847,7 +847,8 @@
                             <th>Licence #</th>
                             <th>Entry Licence</th>
                             <th>Expiry</th>
-                            <th style="min-width:150px;">MA Verified Licence / Expiry</th>
+                            <th style="min-width:130px;">MA Licence Type</th>
+                            <th style="min-width:90px;">MA Expiry</th>
                             <th style="text-align:center;width:75px;">Licence<br>Ok</th>
                         </tr>
                     </thead>
@@ -2479,7 +2480,7 @@
 
             allEntries.forEach(entry => {
                 const { entryId, fullName, entrantType, category, licenceNum,
-                        displayType, displayExpiry, expiryFromPDF, maStatus, isExpired, verData } = entry;
+                        csvType, displayExpiry, maStatus, isExpired, verData } = entry;
 
                 // Always count stats for every qualifying entry (not filtered)
                 total++;
@@ -2533,23 +2534,31 @@
                 tdExpiry.appendChild(inp);
                 tr.appendChild(tdExpiry);
 
-                // Column 7: MA Verified Licence / Expiry (read-only, from uploaded MA Report PDF)
-                const tdVerif = document.createElement('td');
-                tdVerif.style.padding = '6px 8px';
+                // Column 7: MA Licence Type (read-only, from uploaded MA Report PDF)
+                const tdVerifType = document.createElement('td');
+                tdVerifType.style.padding = '6px 8px';
+                // Column 8: MA Expiry (read-only, from uploaded MA Report PDF)
+                const tdVerifExpiry = document.createElement('td');
+                tdVerifExpiry.style.padding = '6px 8px';
                 if (verData && verData.best) {
                     const b = verData.best;
                     const bActive = (b.status || '').toLowerCase() === 'active';
-                    tdVerif.innerHTML =
-                        `<div style="font-size:12px;font-weight:600;color:${bActive ? '#15803D' : '#991B1B'}">${b.type || '—'}</div>` +
-                        (b.expiry ? `<div style="font-size:10px;color:#6B7280;margin-top:2px;">Exp: ${b.expiry}</div>` : '');
+                    const typeCol = bActive ? '#15803D' : '#991B1B';
+                    tdVerifType.innerHTML = `<span style="font-size:12px;font-weight:600;color:${typeCol}">${b.type || '—'}</span>`;
+                    tdVerifExpiry.innerHTML = b.expiry
+                        ? `<span style="font-size:12px;">${b.expiry}</span>`
+                        : '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 } else if (verData) {
                     const col = (verData.section === 'matchNotFound' || verData.section === 'noMembershipData')
                         ? '#6B7280' : '#B45309';
-                    tdVerif.innerHTML = `<span style="font-size:11px;color:${col}">${maStatus}</span>`;
+                    tdVerifType.innerHTML = `<span style="font-size:11px;color:${col}">${maStatus}</span>`;
+                    tdVerifExpiry.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 } else {
-                    tdVerif.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
+                    tdVerifType.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
+                    tdVerifExpiry.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 }
-                tr.appendChild(tdVerif);
+                tr.appendChild(tdVerifType);
+                tr.appendChild(tdVerifExpiry);
 
                 // Column 7: Licence Ok checkbox (shares maLicenceChecked with dashboard)
                 const tdOk = document.createElement('td');
