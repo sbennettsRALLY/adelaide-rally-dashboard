@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.48 - MA Checks: fix Speed/Circuit parse bug; merge expiry columns; auto-fill from PDF 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.49 - MA parser: require status word to confirm licence row; fixes header/footer contamination 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2763,9 +2763,12 @@
                 }
                 if (!currentSection) continue;
 
-                // Check for licence detail row FIRST — before any skip rules.
-                // Licence type names can contain "Motorsport Australia" (e.g. "Motorsport Australia Speed Licence")
-                // so the skip filter must not run before we test for a date-bearing detail row.
+                // Check for licence detail row BEFORE skip rules, because licence type names can
+                // contain "Motorsport Australia" (e.g. "Motorsport Australia Speed Licence").
+                // However, only treat a line as a detail row if it has BOTH a date AND a
+                // recognisable status (Active / Expired / Under Review) — this prevents page
+                // footers or report headers that happen to contain a date from being parsed
+                // as licence rows.
                 if (currentMember) {
                     const dateMatch = line.match(DATE_RE);
                     if (dateMatch) {
@@ -2773,15 +2776,17 @@
                         const dateIdx = line.indexOf(expiry);
                         const before  = line.substring(0, dateIdx).trim();
                         const after   = line.substring(dateIdx + expiry.length).trim();
-                        let status = 'Unknown';
-                        const stMatch = after.match(/^(Active|Expired|Under Review)/i);
-                        if (stMatch) status = stMatch[1];
-                        currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status });
-                        continue;
+                        const stMatch = after.match(/\b(Active|Expired|Under Review)\b/i);
+                        if (stMatch && before) {
+                            // Confirmed licence detail row — push and move to next line
+                            currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status: stMatch[1] });
+                            continue;
+                        }
+                        // Has a date but no status → not a licence row; fall through to skip rules
                     }
                 }
 
-                // Skip table header lines and footer noise (non-detail rows only)
+                // Skip table header lines and footer noise
                 if ((lower.startsWith('member') && lower.includes('expiry')) ||
                     lower.startsWith('page ')  ||
                     lower.includes('motorsport australia') ||
