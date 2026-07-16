@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.51 - MA parser: fix date-check gate missing when currentMember null (combined line at section start) and MEMBER_RE overwrite of already-parsed licences 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.52 - MA checks: remove auto-tick, validate expiry against event end date (18 Oct 2026) 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2367,8 +2367,8 @@
                 .map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1)
                 .filter(i => i >= 0);
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // Licence must be valid through the last day of the event (18 Oct 2026)
+            const today = new Date(2026, 9, 18); // October 18 2026 (month is 0-indexed)
             const searchTerm = document.getElementById('maChecksSearch').value.toLowerCase();
 
             // Sort by entry number ascending
@@ -2695,34 +2695,7 @@
 
             maLicenceVerification = verMap;
 
-            // Auto-check maLicenceChecked for entries with a valid+active licence in the report
-            if (csvData.length > 0) {
-                const _eiIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                const _lnIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
-                csvData.forEach(row => {
-                    const eid    = _eiIdx >= 0 ? (row[_eiIdx] || '').trim() : '';
-                    const licNum = _lnIdx >= 0 ? (row[_lnIdx] || '').trim() : '';
-                    if (!eid || !licNum) return;
-                    const ver = verMap[licNum];
-                    if (!ver || !ver.best) return;
-                    // Auto-tick only when BOTH active status AND current expiry date are confirmed
-                    const isActive = (ver.best.status || '').toLowerCase() === 'active';
-                    let expValid = false;
-                    if (ver.best.expiry) {
-                        const ap = ver.best.expiry.split(/[\/\-\.]/);
-                        if (ap.length === 3) {
-                            const aExp = ap[0].length === 4
-                                ? new Date(parseInt(ap[0]), parseInt(ap[1]) - 1, parseInt(ap[2]))
-                                : new Date(parseInt(ap[2]), parseInt(ap[1]) - 1, parseInt(ap[0]));
-                            expValid = aExp && !isNaN(aExp) && aExp >= new Date(new Date().setHours(0,0,0,0));
-                        }
-                    }
-                    if (ver.section === 'validMembership' && isActive && expValid) {
-                        maLicenceChecked[eid] = true;
-                        maLicenceChecked[eid + '_locked'] = true;
-                    }
-                });
-            }
+            // Auto-tick removed: Licence Ok must be confirmed manually by the clerk.
 
             saveToStorage();
             renderMALicenceChecks();
@@ -2888,8 +2861,8 @@
             const relevant = licences.filter(isRelevant);
             if (relevant.length === 0) return null; // No relevant licences for this event
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+            // Expiry must reach the last day of the event (18 Oct 2026)
+            const today = new Date(2026, 9, 18); // October 18 2026 (month is 0-indexed)
 
             const parseExpiry = expiry => {
                 if (!expiry) return null;
