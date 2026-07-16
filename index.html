@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.40 - DocuSign scan: fix entryIdIdx not found in CSV match step 2026-07-14 -->
+<!-- Adelaide Rally 2026 Dashboard v3.41 - MA Verification: filter to rally-relevant licence types only 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2419,6 +2419,10 @@
                             if (statusActive && sec === 'validMembership') maStatus = '✓ Valid';
                             else if (sec === 'reviewMembership')           maStatus = statusActive ? '⚠ Review' : '✗ Expired';
                             else                                           maStatus = '✗ Expired';
+                        } else if (verData.hasRelevantLicence === false) {
+                            // Person has licences but none are rally-relevant (wrong type for this event)
+                            maStatus = '✗ Wrong Licence Type';
+                            statusActive = false;
                         } else {
                             statusActive = (sec !== 'reviewMembership');
                             maStatus = sec === 'reviewMembership' ? '⚠ Review' : '✓ Valid';
@@ -2747,9 +2751,14 @@
                 currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status });
             }
 
-            // Compute the "best" licence for each member
+            // Compute the "best" licence for each member (rally-relevant types only)
             for (const entry of Object.values(result)) {
-                if (entry.licences.length > 0) entry.best = _maVerifBestLicence(entry.licences);
+                if (entry.licences.length > 0) {
+                    entry.best = _maVerifBestLicence(entry.licences);
+                    // Flag whether the person has any rally-relevant licences at all
+                    // (null best means licences exist but none are relevant for this event)
+                    entry.hasRelevantLicence = entry.best !== null;
+                }
             }
             return result;
         }
@@ -2770,18 +2779,27 @@
         }
 
         function _maVerifBestLicence(licences) {
-            // Prioritise: active Rally/Navigator > active Speed > any active > any expired rally > any
+            // Only consider rally-relevant licence types for this event:
+            //   Rally (all variants), Navigator - Rally, Speed, Tarmac Rally Endorsement
+            const isRelevant = lic => {
+                const t = (lic.type || '').toLowerCase();
+                return t.includes('rally') || t.includes('navigator') || t.includes('speed') || t.includes('tarmac');
+            };
+            const relevant = licences.filter(isRelevant);
+            if (relevant.length === 0) return null; // No relevant licences for this event
+
+            // Prioritise: active Rally/Navigator > active Speed > active Tarmac > expired equivalents
             const score = lic => {
                 const t = (lic.type || '').toLowerCase();
                 const active = (lic.status || '').toLowerCase() === 'active';
                 let s = active ? 1000 : 0;
                 if ((t.includes('rally') || t.includes('navigator')) && !t.includes('endorsement')) s += 300;
-                else if (t.includes('speed') || t.includes('race')) s += 200;
+                else if (t.includes('speed')) s += 200;
                 else if (t.includes('tarmac')) s += 100;
                 else s += 10;
                 return s;
             };
-            return [...licences].sort((a, b) => score(b) - score(a))[0];
+            return relevant.sort((a, b) => score(b) - score(a))[0];
         }
         // ─────────────────────────────────────────────────────────────────────────
 
