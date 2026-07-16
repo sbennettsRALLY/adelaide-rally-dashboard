@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.47 - MA Verification: require BOTH active status AND current expiry to be valid 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.48 - MA Checks: fix Speed/Circuit parse bug; merge expiry columns; auto-fill from PDF 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -848,7 +848,6 @@
                             <th>Entry Licence</th>
                             <th>Expiry</th>
                             <th style="min-width:130px;">MA Licence Type</th>
-                            <th style="min-width:90px;">MA Expiry</th>
                             <th style="text-align:center;width:75px;">Licence<br>Ok</th>
                         </tr>
                     </thead>
@@ -2401,6 +2400,7 @@
                 const verData     = licenceNum ? maLicenceVerification[licenceNum] : null;
 
                 let displayExpiry = maExpiryOverride[entryId] || csvExpiry;
+                let expiryFromPDF = false;
                 let maStatus      = '';
                 let statusActive  = false;
 
@@ -2413,7 +2413,11 @@
                     } else {
                         const best = verData.best;
                         if (best) {
-                            // PDF data goes in the new MA Verified column — don't overwrite csvType/displayExpiry
+                            // Auto-fill expiry from PDF if no manual override exists
+                            if (best.expiry && !maExpiryOverride[entryId]) {
+                                displayExpiry = best.expiry;
+                                expiryFromPDF = true;
+                            }
                             // Valid = BOTH active status AND a current (future) expiry date
                             const bestIsActive = (best.status || '').toLowerCase() === 'active';
                             let bestExpValid = false;
@@ -2460,7 +2464,7 @@
                 }
 
                 allEntries.push({ entryId, fullName, entrantType, category, licenceNum, csvType,
-                                  displayExpiry, maStatus, statusActive, isExpired, verData });
+                                  displayExpiry, expiryFromPDF, maStatus, statusActive, isExpired, verData });
             });
 
             // ── Populate dynamic filter dropdowns (preserve current selection) ──────
@@ -2493,7 +2497,7 @@
 
             allEntries.forEach(entry => {
                 const { entryId, fullName, entrantType, category, licenceNum,
-                        csvType, displayExpiry, maStatus, isExpired, verData } = entry;
+                        csvType, displayExpiry, expiryFromPDF, maStatus, isExpired, verData } = entry;
 
                 // Always count stats for every qualifying entry (not filtered)
                 total++;
@@ -2529,14 +2533,16 @@
                     tr.appendChild(td);
                 });
 
-                // Column 6: Expiry (manual override or CSV value — always editable)
+                // Column 6: Expiry — auto-filled from MA Report PDF when available, always editable
                 const tdExpiry = document.createElement('td');
                 tdExpiry.style.padding = '4px 8px';
                 const inp = document.createElement('input');
                 inp.type = 'text';
                 inp.value = displayExpiry || '';
                 inp.placeholder = 'dd/mm/yyyy';
-                inp.title = 'Entry form expiry — override manually if needed';
+                inp.title = expiryFromPDF
+                    ? 'Auto-filled from MA Report — edit to override'
+                    : 'Enter expiry date manually';
                 inp.style.cssText = 'width:90px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:' + (isExpired ? '#FEF2F2' : '#fff') + ';';
                 inp.addEventListener('change', (e) => {
                     const v = e.target.value.trim();
@@ -2545,35 +2551,32 @@
                     renderMALicenceChecks();
                 });
                 tdExpiry.appendChild(inp);
+                if (expiryFromPDF) {
+                    const hint = document.createElement('div');
+                    hint.style.cssText = 'font-size:9px;color:#6b7280;font-style:italic;margin-top:1px;';
+                    hint.textContent = '📋 from report';
+                    tdExpiry.appendChild(hint);
+                }
                 tr.appendChild(tdExpiry);
 
                 // Column 7: MA Licence Type (read-only, from uploaded MA Report PDF)
                 const tdVerifType = document.createElement('td');
                 tdVerifType.style.padding = '6px 8px';
-                // Column 8: MA Expiry (read-only, from uploaded MA Report PDF)
-                const tdVerifExpiry = document.createElement('td');
-                tdVerifExpiry.style.padding = '6px 8px';
                 if (verData && verData.best) {
                     const b = verData.best;
                     const bActive = (b.status || '').toLowerCase() === 'active';
                     const typeCol = bActive ? '#15803D' : '#991B1B';
                     tdVerifType.innerHTML = `<span style="font-size:12px;font-weight:600;color:${typeCol}">${b.type || '—'}</span>`;
-                    tdVerifExpiry.innerHTML = b.expiry
-                        ? `<span style="font-size:12px;">${b.expiry}</span>`
-                        : '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 } else if (verData) {
                     // No best licence — show status text with colour matching meaning
                     const typeCol = maStatus.startsWith('✓') ? '#15803D'
                                   : maStatus.startsWith('⚠') ? '#B45309'
                                   : '#6B7280';
                     tdVerifType.innerHTML = `<span style="font-size:11px;color:${typeCol}">${maStatus}</span>`;
-                    tdVerifExpiry.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 } else {
                     tdVerifType.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
-                    tdVerifExpiry.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
                 }
                 tr.appendChild(tdVerifType);
-                tr.appendChild(tdVerifExpiry);
 
                 // Column 7: Licence Ok checkbox (shares maLicenceChecked with dashboard)
                 const tdOk = document.createElement('td');
@@ -2760,7 +2763,25 @@
                 }
                 if (!currentSection) continue;
 
-                // Skip table header lines and footer noise
+                // Check for licence detail row FIRST — before any skip rules.
+                // Licence type names can contain "Motorsport Australia" (e.g. "Motorsport Australia Speed Licence")
+                // so the skip filter must not run before we test for a date-bearing detail row.
+                if (currentMember) {
+                    const dateMatch = line.match(DATE_RE);
+                    if (dateMatch) {
+                        const expiry  = dateMatch[1];
+                        const dateIdx = line.indexOf(expiry);
+                        const before  = line.substring(0, dateIdx).trim();
+                        const after   = line.substring(dateIdx + expiry.length).trim();
+                        let status = 'Unknown';
+                        const stMatch = after.match(/^(Active|Expired|Under Review)/i);
+                        if (stMatch) status = stMatch[1];
+                        currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status });
+                        continue;
+                    }
+                }
+
+                // Skip table header lines and footer noise (non-detail rows only)
                 if ((lower.startsWith('member') && lower.includes('expiry')) ||
                     lower.startsWith('page ')  ||
                     lower.includes('motorsport australia') ||
@@ -2778,22 +2799,6 @@
                         ? result[licNum] : null;
                     continue;
                 }
-
-                // Licence detail row (contains dd/mm/yyyy)?
-                if (!currentMember) continue;
-                const dateMatch = line.match(DATE_RE);
-                if (!dateMatch) continue;
-
-                const expiry  = dateMatch[1];
-                const dateIdx = line.indexOf(expiry);
-                const before  = line.substring(0, dateIdx).trim();
-                const after   = line.substring(dateIdx + expiry.length).trim();
-
-                let status = 'Unknown';
-                const stMatch = after.match(/^(Active|Expired|Under Review)/i);
-                if (stMatch) status = stMatch[1];
-
-                currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status });
             }
 
             // Compute the "best" licence for each member (rally-relevant types only)
