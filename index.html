@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.49 - MA parser: require status word to confirm licence row; fixes header/footer contamination 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.50 - MA parser: fix combined member+licence lines and surname prefix in licence type 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2765,10 +2765,9 @@
 
                 // Check for licence detail row BEFORE skip rules, because licence type names can
                 // contain "Motorsport Australia" (e.g. "Motorsport Australia Speed Licence").
-                // However, only treat a line as a detail row if it has BOTH a date AND a
-                // recognisable status (Active / Expired / Under Review) — this prevents page
-                // footers or report headers that happen to contain a date from being parsed
-                // as licence rows.
+                // Only treat a line as a detail row if it has BOTH a date AND a recognisable
+                // status word — this keeps page footers / report headers with dates from being
+                // parsed as licence rows.
                 if (currentMember) {
                     const dateMatch = line.match(DATE_RE);
                     if (dateMatch) {
@@ -2778,11 +2777,42 @@
                         const after   = line.substring(dateIdx + expiry.length).trim();
                         const stMatch = after.match(/\b(Active|Expired|Under Review)\b/i);
                         if (stMatch && before) {
-                            // Confirmed licence detail row — push and move to next line
-                            currentMember.licences.push({ type: _maVerifDedupeType(before), expiry, status: stMatch[1] });
+                            // Check if 'before' starts with a member ID (e.g. "21004391 - Steven Engel National Rally …")
+                            // This happens when PDF.js concatenates a member header line with the first licence row.
+                            // In that case we must create the new member and assign the licence to THEM, not to the
+                            // previous currentMember.
+                            const memberStart = before.match(/^(\d{4,8})\s*-\s*(.*)/);
+                            if (memberStart) {
+                                const newLicNum  = memberStart[1];
+                                const remainder  = memberStart[2]; // "Firstname Lastname LicenceType …"
+                                // Split name from licence type at the first known licence keyword
+                                const kwMatch = remainder.match(/\b(national rally|rally|speed|circuit|tarmac|navigator|kart|off road|club)\b/i);
+                                const kwIdx   = kwMatch ? remainder.toLowerCase().indexOf(kwMatch[0].toLowerCase()) : -1;
+                                const licType  = kwIdx >= 0 ? remainder.substring(kwIdx) : remainder;
+                                const memName  = kwIdx > 0  ? remainder.substring(0, kwIdx).trim() : '';
+                                if (!result[newLicNum]) {
+                                    result[newLicNum] = { section: currentSection, name: memName || newLicNum, licences: [], best: null };
+                                }
+                                currentMember = (currentSection === 'reviewMembership' || currentSection === 'validMembership')
+                                    ? result[newLicNum] : null;
+                                if (currentMember && licType) {
+                                    currentMember.licences.push({ type: _maVerifDedupeType(licType), expiry, status: stMatch[1] });
+                                }
+                            } else {
+                                // Regular detail row — but PDF may have prepended the member's surname to the
+                                // licence type column (layout artefact). Strip it if present.
+                                let licType = _maVerifDedupeType(before);
+                                if (currentMember.name) {
+                                    const lastName = currentMember.name.trim().split(/\s+/).pop();
+                                    if (lastName && licType.toLowerCase().startsWith(lastName.toLowerCase() + ' ')) {
+                                        licType = licType.substring(lastName.length).trim();
+                                    }
+                                }
+                                currentMember.licences.push({ type: licType, expiry, status: stMatch[1] });
+                            }
                             continue;
                         }
-                        // Has a date but no status → not a licence row; fall through to skip rules
+                        // Has a date but no recognisable status → not a licence row; fall through
                     }
                 }
 
