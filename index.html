@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.44 - MA Checks: clarify "no lic. data" status when PDF has no licence rows 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.45 - MA Verification: add Circuit as valid licence type 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2805,7 +2805,7 @@
             //   Rally (all variants), Navigator - Rally, Speed, Tarmac Rally Endorsement
             const isRelevant = lic => {
                 const t = (lic.type || '').toLowerCase();
-                return t.includes('rally') || t.includes('navigator') || t.includes('speed') || t.includes('tarmac');
+                return t.includes('rally') || t.includes('navigator') || t.includes('speed') || t.includes('tarmac') || t.includes('circuit');
             };
             const relevant = licences.filter(isRelevant);
             if (relevant.length === 0) return null; // No relevant licences for this event
@@ -2817,7 +2817,8 @@
                 let s = active ? 1000 : 0;
                 if ((t.includes('rally') || t.includes('navigator')) && !t.includes('endorsement')) s += 300;
                 else if (t.includes('speed')) s += 200;
-                else if (t.includes('tarmac')) s += 100;
+                else if (t.includes('tarmac')) s += 150;
+                else if (t.includes('circuit')) s += 100;
                 else s += 10;
                 return s;
             };
