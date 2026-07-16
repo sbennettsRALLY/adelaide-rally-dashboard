@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.41 - MA Verification: filter to rally-relevant licence types only 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.42 - MA Checks: Entry Licence column + MA Verified Licence/Expiry column 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -845,8 +845,9 @@
                             <th>Type</th>
                             <th>Category</th>
                             <th>Licence #</th>
-                            <th>Licence Type</th>
+                            <th>Entry Licence</th>
                             <th>Expiry</th>
+                            <th style="min-width:150px;">MA Verified Licence / Expiry</th>
                             <th style="text-align:center;width:75px;">Licence<br>Ok</th>
                         </tr>
                     </thead>
@@ -2398,9 +2399,7 @@
                 const csvExpiry   = licenceExpiryIdx >= 0 ? (row[licenceExpiryIdx] || '').trim() : '';
                 const verData     = licenceNum ? maLicenceVerification[licenceNum] : null;
 
-                let displayType   = csvType;
                 let displayExpiry = maExpiryOverride[entryId] || csvExpiry;
-                let expiryFromPDF = false;
                 let maStatus      = '';
                 let statusActive  = false;
 
@@ -2413,8 +2412,7 @@
                     } else {
                         const best = verData.best;
                         if (best) {
-                            displayType  = best.type;
-                            if (best.expiry) { displayExpiry = best.expiry; expiryFromPDF = true; }
+                            // PDF data goes in the new MA Verified column — don't overwrite csvType/displayExpiry
                             statusActive = (best.status || '').toLowerCase() === 'active';
                             if (statusActive && sec === 'validMembership') maStatus = '✓ Valid';
                             else if (sec === 'reviewMembership')           maStatus = statusActive ? '⚠ Review' : '✗ Expired';
@@ -2447,8 +2445,8 @@
                     }
                 }
 
-                allEntries.push({ entryId, fullName, entrantType, category, licenceNum, displayType,
-                                  displayExpiry, expiryFromPDF, maStatus, statusActive, isExpired, verData });
+                allEntries.push({ entryId, fullName, entrantType, category, licenceNum, csvType,
+                                  displayExpiry, maStatus, statusActive, isExpired, verData });
             });
 
             // ── Populate dynamic filter dropdowns (preserve current selection) ──────
@@ -2467,7 +2465,7 @@
             };
             populateSelect('maChecksFilterType',        'All Types',         allEntries.map(e => e.entrantType));
             populateSelect('maChecksFilterCategory',    'All Categories',    allEntries.map(e => e.category));
-            populateSelect('maChecksFilterLicenceType', 'All Licence Types', allEntries.map(e => e.displayType));
+            populateSelect('maChecksFilterLicenceType', 'All Entry Licence Types', allEntries.map(e => e.csvType));
 
             // ── Read active filter values ─────────────────────────────────────────
             const fType    = (document.getElementById('maChecksFilterType')        || {}).value || '';
@@ -2492,14 +2490,14 @@
                 // Apply UI filters
                 if (fType    && entrantType  !== fType)    return;
                 if (fCat     && category     !== fCat)     return;
-                if (fLicType && displayType  !== fLicType) return;
+                if (fLicType && csvType      !== fLicType) return;
                 if (fOk === 'ok'    && !maLicenceChecked[entryId]) return;
                 if (fOk === 'notok' &&  maLicenceChecked[entryId]) return;
                 if (fExpiry === 'valid'   &&  isExpired) return;
                 if (fExpiry === 'expired' && !isExpired) return;
 
                 // Search filter
-                const searchable = [entryId, fullName, licenceNum, displayType, maStatus].join(' ').toLowerCase();
+                const searchable = [entryId, fullName, licenceNum, csvType, maStatus].join(' ').toLowerCase();
                 if (searchTerm && !searchable.includes(searchTerm)) return;
 
                 // ── Build row ──────────────────────────────────────────────────────
@@ -2509,37 +2507,49 @@
                     tr.style.color = '#991B1B';
                 }
 
-                // Columns 0–5
-                [entryId, fullName, entrantType, category, licenceNum, displayType].forEach(val => {
+                // Columns 0–5 (Entry Licence = csvType from entry form)
+                [entryId, fullName, entrantType, category, licenceNum, csvType].forEach(val => {
                     const td = document.createElement('td');
                     td.textContent = val;
                     td.style.padding = '8px';
                     tr.appendChild(td);
                 });
 
-                // Column 6: Expiry
+                // Column 6: Expiry (manual override or CSV value — always editable)
                 const tdExpiry = document.createElement('td');
                 tdExpiry.style.padding = '4px 8px';
-                if (expiryFromPDF) {
-                    tdExpiry.innerHTML =
-                        `<span style="font-size:13px;">${displayExpiry}</span>` +
-                        `<div style="font-size:9px;color:#6b7280;font-style:italic;margin-top:1px;">📋 from report</div>`;
-                } else {
-                    const inp = document.createElement('input');
-                    inp.type = 'text';
-                    inp.value = displayExpiry || '';
-                    inp.placeholder = 'dd/mm/yyyy';
-                    inp.title = 'Enter expiry date manually';
-                    inp.style.cssText = 'width:90px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:' + (isExpired ? '#FEF2F2' : '#fff') + ';';
-                    inp.addEventListener('change', (e) => {
-                        const v = e.target.value.trim();
-                        if (v) maExpiryOverride[entryId] = v; else delete maExpiryOverride[entryId];
-                        saveToStorage();
-                        renderMALicenceChecks();
-                    });
-                    tdExpiry.appendChild(inp);
-                }
+                const inp = document.createElement('input');
+                inp.type = 'text';
+                inp.value = displayExpiry || '';
+                inp.placeholder = 'dd/mm/yyyy';
+                inp.title = 'Entry form expiry — override manually if needed';
+                inp.style.cssText = 'width:90px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:' + (isExpired ? '#FEF2F2' : '#fff') + ';';
+                inp.addEventListener('change', (e) => {
+                    const v = e.target.value.trim();
+                    if (v) maExpiryOverride[entryId] = v; else delete maExpiryOverride[entryId];
+                    saveToStorage();
+                    renderMALicenceChecks();
+                });
+                tdExpiry.appendChild(inp);
                 tr.appendChild(tdExpiry);
+
+                // Column 7: MA Verified Licence / Expiry (read-only, from uploaded MA Report PDF)
+                const tdVerif = document.createElement('td');
+                tdVerif.style.padding = '6px 8px';
+                if (verData && verData.best) {
+                    const b = verData.best;
+                    const bActive = (b.status || '').toLowerCase() === 'active';
+                    tdVerif.innerHTML =
+                        `<div style="font-size:12px;font-weight:600;color:${bActive ? '#15803D' : '#991B1B'}">${b.type || '—'}</div>` +
+                        (b.expiry ? `<div style="font-size:10px;color:#6B7280;margin-top:2px;">Exp: ${b.expiry}</div>` : '');
+                } else if (verData) {
+                    const col = (verData.section === 'matchNotFound' || verData.section === 'noMembershipData')
+                        ? '#6B7280' : '#B45309';
+                    tdVerif.innerHTML = `<span style="font-size:11px;color:${col}">${maStatus}</span>`;
+                } else {
+                    tdVerif.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
+                }
+                tr.appendChild(tdVerif);
 
                 // Column 7: Licence Ok checkbox (shares maLicenceChecked with dashboard)
                 const tdOk = document.createElement('td');
@@ -5099,7 +5109,7 @@
                     const licNumIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
                     const licTypeIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
                     const licExpiryIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
-                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Licence Type', 'Expiry', 'MA Status']];
+                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Entry Licence', 'Expiry', 'MA Verified Licence', 'MA Verified Expiry', 'MA Status']];
                     sortedIndices.forEach(idx => {
                         const row = csvData[idx];
                         const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
@@ -5118,19 +5128,22 @@
                         // Look up MA verification status
                         const verData   = licNum ? maLicenceVerification[licNum] : null;
                         let maStatus = '';
-                        let exportType = licType, exportExpiry = licExpiry;
+                        let maVerifType = '', maVerifExpiry = '';
                         if (verData) {
                             const sec = verData.section;
                             if (sec === 'matchNotFound') { maStatus = 'Not Found'; }
                             else if (sec === 'noMembershipData') { maStatus = 'No Data'; }
                             else if (verData.best) {
-                                exportType   = verData.best.type;
-                                exportExpiry = verData.best.expiry;
+                                maVerifType   = verData.best.type || '';
+                                maVerifExpiry = verData.best.expiry || '';
                                 const active = (verData.best.status || '').toLowerCase() === 'active';
                                 maStatus = active ? (sec === 'validMembership' ? 'Valid' : 'Review') : 'Expired';
+                            } else if (verData.hasRelevantLicence === false) {
+                                maStatus = 'Wrong Licence Type';
                             }
                         }
-                        maChecksData.push([entryId, name, entryType, category, licNum, exportType, exportExpiry, maStatus]);
+                        const entryExpiry = (maExpiryOverride[entryId] || licExpiry);
+                        maChecksData.push([entryId, name, entryType, category, licNum, licType, entryExpiry, maVerifType, maVerifExpiry, maStatus]);
                     });
                     const maChecksWs = XLSX.utils.aoa_to_sheet(maChecksData);
                     XLSX.utils.book_append_sheet(wb, maChecksWs, 'MA Licence Checks');
