@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.50 - MA parser: fix combined member+licence lines and surname prefix in licence type 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.51 - MA parser: fix date-check gate missing when currentMember null (combined line at section start) and MEMBER_RE overwrite of already-parsed licences 2026-07-16 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -2763,12 +2763,15 @@
                 }
                 if (!currentSection) continue;
 
-                // Check for licence detail row BEFORE skip rules, because licence type names can
-                // contain "Motorsport Australia" (e.g. "Motorsport Australia Speed Licence").
-                // Only treat a line as a detail row if it has BOTH a date AND a recognisable
-                // status word — this keeps page footers / report headers with dates from being
-                // parsed as licence rows.
-                if (currentMember) {
+                // Check for a date-containing line BEFORE the skip rules, because licence type
+                // names can contain "Motorsport Australia". We require BOTH a date AND a
+                // recognisable status word — this stops page footers/report headers with
+                // dates being treated as licence rows.
+                // NOTE: the date check runs regardless of whether currentMember is set,
+                // because the very first entry in a section arrives as a fully-combined line
+                // (member ID + name + type + expiry + status all on one line) before
+                // currentMember has been initialised by a plain member-only line.
+                {
                     const dateMatch = line.match(DATE_RE);
                     if (dateMatch) {
                         const expiry  = dateMatch[1];
@@ -2777,10 +2780,11 @@
                         const after   = line.substring(dateIdx + expiry.length).trim();
                         const stMatch = after.match(/\b(Active|Expired|Under Review)\b/i);
                         if (stMatch && before) {
-                            // Check if 'before' starts with a member ID (e.g. "21004391 - Steven Engel National Rally …")
-                            // This happens when PDF.js concatenates a member header line with the first licence row.
-                            // In that case we must create the new member and assign the licence to THEM, not to the
-                            // previous currentMember.
+                            // Does 'before' start with a member ID?
+                            // This covers two scenarios:
+                            //  A) currentMember is null: first entry in section as a combined line
+                            //  B) currentMember is set: PDF.js concatenated the next member's line
+                            //     with their first licence row (e.g. "21004391 - Steven Engel Rally …")
                             const memberStart = before.match(/^(\d{4,8})\s*-\s*(.*)/);
                             if (memberStart) {
                                 const newLicNum  = memberStart[1];
@@ -2798,9 +2802,10 @@
                                 if (currentMember && licType) {
                                     currentMember.licences.push({ type: _maVerifDedupeType(licType), expiry, status: stMatch[1] });
                                 }
-                            } else {
-                                // Regular detail row — but PDF may have prepended the member's surname to the
-                                // licence type column (layout artefact). Strip it if present.
+                                continue;
+                            } else if (currentMember) {
+                                // Regular licence detail row for the current member.
+                                // Strip any leading surname the PDF may have prepended to the type column.
                                 let licType = _maVerifDedupeType(before);
                                 if (currentMember.name) {
                                     const lastName = currentMember.name.trim().split(/\s+/).pop();
@@ -2809,10 +2814,11 @@
                                     }
                                 }
                                 currentMember.licences.push({ type: licType, expiry, status: stMatch[1] });
+                                continue;
                             }
-                            continue;
                         }
-                        // Has a date but no recognisable status → not a licence row; fall through
+                        // Has a date but no recognised status (or no before text, or no currentMember
+                        // for a non-combined row) → not a licence row; fall through to skip/member checks
                     }
                 }
 
@@ -2828,7 +2834,16 @@
                 if (memMatch) {
                     const licNum = memMatch[1].trim();
                     const name   = memMatch[2].trim();
-                    result[licNum] = { section: currentSection, name, licences: [], best: null };
+                    // Do NOT overwrite if the combined-line handler already created and
+                    // populated this member record (e.g. Mathew Caon's Speed licence was
+                    // already parsed from a "24010881 - Mathew Caon Speed Speed 30/11/2026
+                    // Active" combined line). Only create the record if it doesn't exist yet.
+                    if (!result[licNum]) {
+                        result[licNum] = { section: currentSection, name, licences: [], best: null };
+                    } else {
+                        result[licNum].section = currentSection;
+                        if (!result[licNum].name) result[licNum].name = name;
+                    }
                     // matchNotFound / noMembershipData have no detail rows
                     currentMember = (currentSection === 'reviewMembership' || currentSection === 'validMembership')
                         ? result[licNum] : null;
