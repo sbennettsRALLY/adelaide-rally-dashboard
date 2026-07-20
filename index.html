@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.52 - MA checks: remove auto-tick, validate expiry against event end date (18 Oct 2026) 2026-07-16 -->
+<!-- Adelaide Rally 2026 Dashboard v3.53 - Dropbox sync: persist merged state to localStorage, refresh all views (not just 3) on sync 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -4037,12 +4037,8 @@
                 }
                 dropboxSyncEnabled = true;
                 console.log('✓ Dropbox REST API sync initialized');
-                // Immediately sync from Dropbox
+                // Immediately sync from Dropbox (syncFromDropbox re-renders the current view)
                 await syncFromDropbox();
-                // Update dashboard after initial sync
-                if (currentView === 'dashboard') {
-                    updateDashboardTables();
-                }
                 // Set up periodic bidirectional sync: pull remote changes first, then push merged state
                 // IMPORTANT: pull must come before push so we don't overwrite other users' changes
                 dropboxSyncTimer = setInterval(async () => {
@@ -4343,18 +4339,30 @@
                         }
                     }
 
+                    // Always persist the merged state to localStorage so the next page load
+                    // starts from the Dropbox-merged snapshot, not the old local-only snapshot.
+                    // We write localStorage directly here (not via saveToStorage) to avoid
+                    // triggering a redundant Dropbox upload of data we just downloaded.
+                    {
+                        const _merged = {
+                            csvData, csvHeaders, docVerified, photoIdVerified,
+                            disclaimerChecked, disclaimerLocked,
+                            withdrawn: Array.from(withdrawn),
+                            navigationMarryEntries, carNumberAssignments,
+                            customCarSlots, manualNavMatches,
+                            maLicenceVerification, maLicenceChecked, maExpiryOverride,
+                            migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]')
+                        };
+                        localStorage.setItem('adelaideRallyData', JSON.stringify(_merged));
+                    }
+                    lastSyncTimestamp = Date.now();
+                    updateDropboxStatus();
                     if (hasChanges || stateUpdated) {
                         console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
-                        lastSyncTimestamp = Date.now();
-                        updateDropboxStatus();
-                        // Refresh current view if data changed (without scrolling to top)
-                        if (currentView === 'dashboard' || currentView === 'doc-chase' || currentView === 'nav-marry') {
-                            switchView(currentView, false);
-                        }
+                        // Refresh the current view with the merged Dropbox data (all views, not just 3)
+                        switchView(currentView, false);
                     } else {
                         console.log('ℹ Sync complete - no changes detected');
-                        lastSyncTimestamp = Date.now();
-                        updateDropboxStatus();
                     }
                 } else {
                     // CDN link returned non-ok — log but don't disable sync; uploads still work
