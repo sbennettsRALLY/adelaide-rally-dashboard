@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.59 - Version check: detect CDN-cached old versions and prompt reload 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.60 - Export: add Licence OK to Doc Chase & MA Licence Checks sheets; CSV merge prefers more entries over newer timestamp 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1145,7 +1145,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.59';
+        const DASHBOARD_VERSION = 'v3.60';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4255,17 +4255,18 @@
                     console.log('ℹ Remote state pulled from Dropbox, merging...');
                     let hasChanges = false;
 
-                    // MERGE STRATEGY for CSV data: whichever CSV was uploaded most recently wins.
-                    // Primary signal: csvUploadTimestamp (set when user uploads via file picker).
-                    // Fallback: entry count (more entries = newer upload).
+                    // MERGE STRATEGY for CSV data: more entries always wins.
+                    // Rally entries only accumulate — a larger CSV is always more complete.
+                    // Timestamp is only used as a tiebreaker when entry counts are equal.
+                    // (Previous behaviour — newer timestamp wins — caused older CSVs to overwrite
+                    //  newer ones whenever a user uploaded an older export more recently.)
                     if (remoteState.csvData && remoteState.csvHeaders) {
                         const remoteCount = remoteState.csvData.length;
                         const localCount  = csvData.length;
                         const remoteTs    = remoteState.csvUploadTimestamp || 0;
                         const localTs     = csvUploadTimestamp || 0;
-                        // Remote wins if: remote was uploaded more recently, OR remote has more entries
-                        // and neither has a timestamp advantage.
-                        const remoteWins  = remoteTs > localTs || (remoteTs === localTs && remoteCount > localCount);
+                        // Remote wins if it has MORE entries, or same count but was uploaded more recently.
+                        const remoteWins  = remoteCount > localCount || (remoteCount === localCount && remoteTs > localTs);
                         if (localCount === 0 && remoteCount === 0) {
                             // Both empty — nothing to do
                         } else if (remoteWins) {
@@ -4938,7 +4939,7 @@
                 const dashboardWs = XLSX.utils.aoa_to_sheet(dashboardData);
                 XLSX.utils.book_append_sheet(wb, dashboardWs, 'Dashboard');
                 // ===== SHEET 2: Document Chase =====
-                const docChaseData = [['Entry #', 'Name', 'Phone', 'Email Address', 'Disclaimer Check', 'Photo ID', 'Payment Complete', 'Entry Type', 'Category']];
+                const docChaseData = [['Entry #', 'Name', 'Phone', 'Email Address', 'Disclaimer Check', 'Photo ID', 'MA Licence OK', 'Payment Complete', 'Entry Type', 'Category']];
                 sortedIndices.forEach(idx => {
                     const row = csvData[idx];
                     const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
@@ -4950,12 +4951,13 @@
                     const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
                     const hasDisclaimer = disclaimerChecked[entryId] ? '✓' : '';
                     const hasPhotoId = photoIdVerified[entryId] ? '✓' : '';
+                    const hasMALicence = maLicenceChecked[entryId] ? '✓' : '';
                     const entryType = entryTypeIdx >= 0 ? row[entryTypeIdx] || '' : '';
                     const paymentAmount = paymentAmountIdx >= 0 ? row[paymentAmountIdx] : '';
                     const paymentAmountNum = paymentAmount ? parseFloat(paymentAmount.trim()) : 0;
                     const paymentDisplay = (paymentAmountNum > 0) ? ('$' + paymentAmount) : '✓';
                     const category = getCategory(row, categoryIdxs);
-                    docChaseData.push([entryId, name, phone, email, hasDisclaimer, hasPhotoId, paymentDisplay, entryType, category]);
+                    docChaseData.push([entryId, name, phone, email, hasDisclaimer, hasPhotoId, hasMALicence, paymentDisplay, entryType, category]);
                 });
                 const docChaseWs = XLSX.utils.aoa_to_sheet(docChaseData);
                 XLSX.utils.book_append_sheet(wb, docChaseWs, 'Document Chase');
@@ -5304,7 +5306,7 @@
                     const licNumIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
                     const licTypeIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
                     const licExpiryIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
-                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Entry Licence', 'Expiry', 'MA Verified Licence', 'MA Verified Expiry', 'MA Status']];
+                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Entry Licence', 'Expiry', 'MA Verified Licence', 'MA Verified Expiry', 'MA Status', 'Licence OK']];
                     sortedIndices.forEach(idx => {
                         const row = csvData[idx];
                         const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
@@ -5338,7 +5340,8 @@
                             }
                         }
                         const entryExpiry = (maExpiryOverride[entryId] || licExpiry);
-                        maChecksData.push([entryId, name, entryType, category, licNum, licType, entryExpiry, maVerifType, maVerifExpiry, maStatus]);
+                        const licenceOk = maLicenceChecked[entryId] ? '✓' : '';
+                        maChecksData.push([entryId, name, entryType, category, licNum, licType, entryExpiry, maVerifType, maVerifExpiry, maStatus, licenceOk]);
                     });
                     const maChecksWs = XLSX.utils.aoa_to_sheet(maChecksData);
                     XLSX.utils.book_append_sheet(wb, maChecksWs, 'MA Licence Checks');
