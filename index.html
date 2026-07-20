@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.54 - Dropbox sync: debounced pull-then-push saves, csvUploadTimestamp for correct CSV winner on merge 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.55 - Fix blank dashboard on load: render dashboard initially, always re-render after Dropbox sync 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1418,10 +1418,10 @@
             })();
             // Initialize Dropbox sync with SDK load waiting
             initDropboxSyncWhenReady();
-            // Render the default Document Chase view if data is available
+            // Render the dashboard (default view) if data is already available from localStorage.
+            // syncFromDropbox() will re-render once Dropbox data arrives.
             if (csvData.length > 0) {
-                renderDocTable();
-                // Disclaimer verification is now manual via "Check Dropbox" button
+                switchView('dashboard', false);
             }
             // Stop sync and save before unload
             window.addEventListener('beforeunload', () => {
@@ -4376,10 +4376,14 @@
                     updateDropboxStatus();
                     if (hasChanges || stateUpdated) {
                         console.log('✓ Synced from Dropbox - Merged data. Total entries:', csvData.length);
-                        // Refresh the current view with the merged Dropbox data (all views, not just 3)
-                        switchView(currentView, false);
                     } else {
                         console.log('ℹ Sync complete - no changes detected');
+                    }
+                    // Always refresh the current view after a Dropbox sync — this covers the case
+                    // where the initial page load called switchView before Dropbox data arrived,
+                    // leaving the dashboard blank when no changes were detected.
+                    if (csvData.length > 0) {
+                        switchView(currentView, false);
                     }
                 } else {
                     // CDN link returned non-ok — log but don't disable sync; uploads still work
