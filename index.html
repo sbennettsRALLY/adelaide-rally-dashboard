@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.56 - Fix checkbox sync: delete key on untick (never store false), strip false values in merge 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.57 - Sync: pull-only auto-sync (no auto-push), strip false values before Dropbox push 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -4050,15 +4050,12 @@
                 // Immediately sync from Dropbox (syncFromDropbox re-renders the current view)
                 await syncFromDropbox();
                 // Set up periodic bidirectional sync: pull remote changes first, then push merged state
-                // IMPORTANT: pull must come before push so we don't overwrite other users' changes
+                // Pull-only auto-sync: read the latest from Dropbox every 5 seconds so this user
+                // always sees other users' changes. Pushes only happen via saveToStorage() when
+                // THIS user makes a change — never automatically, to avoid overwriting others.
                 dropboxSyncTimer = setInterval(async () => {
                     if (dropboxSyncEnabled) {
-                        console.log(`ℹ Sync cycle starting (every ${DROPBOX_SYNC_INTERVAL/1000}s)...`);
-                        // Pull first: merge any changes from other users into local state
                         await syncFromDropbox().catch(e => console.warn('⚠ Auto-sync from Dropbox failed:', e));
-                        // Push second: upload the merged state (includes both local and remote changes)
-                        await syncToDropbox().catch(e => console.warn('⚠ Auto-save to Dropbox failed:', e));
-                        console.log('ℹ Sync cycle complete');
                     }
                 }, DROPBOX_SYNC_INTERVAL);
             } catch (error) {
@@ -4075,21 +4072,24 @@
                     return;
                 }
 
+                // Strip explicit false values before pushing — only true values should ever
+                // reach Dropbox so the union merge can never be poisoned by a local untick.
+                const _t = obj => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v === true));
                 const state = {
                     csvData: csvData,
                     csvHeaders: csvHeaders,
                     csvUploadTimestamp: csvUploadTimestamp,
-                    docVerified: docVerified,
-                    photoIdVerified: photoIdVerified,
-                    disclaimerChecked: disclaimerChecked,
-                    disclaimerLocked: disclaimerLocked,
+                    docVerified: _t(docVerified),
+                    photoIdVerified: _t(photoIdVerified),
+                    disclaimerChecked: _t(disclaimerChecked),
+                    disclaimerLocked: _t(disclaimerLocked),
                     withdrawn: Array.from(withdrawn),
                     navigationMarryEntries: navigationMarryEntries,
                     carNumberAssignments: carNumberAssignments,
                     customCarSlots: customCarSlots,
                     manualNavMatches: manualNavMatches,
                     maLicenceVerification: maLicenceVerification,
-                    maLicenceChecked: maLicenceChecked,
+                    maLicenceChecked: _t(maLicenceChecked),
                     maExpiryOverride: maExpiryOverride,
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
