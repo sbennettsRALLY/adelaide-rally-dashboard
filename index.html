@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.58 - Add Import from Excel (Document Chase) to inject photoIdVerified/disclaimerChecked and push to Dropbox 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.59 - Version check: detect CDN-cached old versions and prompt reload 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1145,6 +1145,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
+        const DASHBOARD_VERSION = 'v3.59';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1425,6 +1426,8 @@
             if (csvData.length > 0) {
                 switchView('dashboard', false);
             }
+            // Version check: run once after 5s, then every 5 minutes
+            setTimeout(() => { checkForUpdates(); setInterval(checkForUpdates, 5 * 60 * 1000); }, 5000);
             // Stop sync and save before unload
             window.addEventListener('beforeunload', () => {
                 stopDropboxAutoSync();
@@ -3882,6 +3885,45 @@
             console.log('✓ Initializing Dropbox REST API sync...');
             initDropboxSync();
         }
+        // ── Version check (detects CDN-cached old versions) ──────────────────
+        async function checkForUpdates() {
+            try {
+                const resp = await fetch(
+                    'https://raw.githubusercontent.com/sbennettsRALLY/adelaide-rally-dashboard/main/index.html?_=' + Date.now(),
+                    { cache: 'no-store' }
+                );
+                if (!resp.ok) return;
+                // Read only the first 300 bytes — version comment is on line 2
+                const reader = resp.body.getReader();
+                let text = '';
+                while (text.length < 300) {
+                    const { done, value } = await reader.read();
+                    if (value) text += new TextDecoder().decode(value);
+                    if (done || text.length >= 300) { reader.cancel(); break; }
+                }
+                const match = text.match(/Adelaide Rally 2026 Dashboard (v[\d.]+)/);
+                if (!match) return;
+                const latestVersion = match[1];
+                if (latestVersion !== DASHBOARD_VERSION) {
+                    showUpdateBanner(latestVersion);
+                }
+            } catch(e) { /* silent — version check is non-critical */ }
+        }
+
+        function showUpdateBanner(latestVersion) {
+            if (document.getElementById('update-banner')) return;
+            const banner = document.createElement('div');
+            banner.id = 'update-banner';
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:200;background:#c0720a;color:#fff;text-align:center;padding:8px 20px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+            banner.innerHTML = `⚠️ Dashboard update available (${latestVersion}) — you're running a cached older version (${DASHBOARD_VERSION}). This may cause sync issues. <button onclick="location.href=location.pathname+'?r='+Date.now()" style="background:#fff;color:#c0720a;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:700;font-size:13px;">Update Now</button><button onclick="document.getElementById('update-banner').remove();document.querySelector('.hdr').style.top=''" style="background:transparent;color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.4);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;margin-left:4px;">Dismiss</button>`;
+            document.body.prepend(banner);
+            // Push sticky header down so it doesn't overlap the banner
+            setTimeout(() => {
+                const hdr = document.querySelector('.hdr');
+                if (hdr) hdr.style.top = banner.offsetHeight + 'px';
+            }, 50);
+        }
+
         // Dropbox OAuth Configuration
         const DROPBOX_CLIENT_ID = 'xr6w6l4uv3nrenl'; // Your registered Dropbox app Client ID
         const DROPBOX_REDIRECT_URI = window.location.origin + window.location.pathname;
