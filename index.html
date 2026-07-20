@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.53 - Dropbox sync: persist merged state to localStorage, refresh all views (not just 3) on sync 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.54 - Dropbox sync: debounced pull-then-push saves, csvUploadTimestamp for correct CSV winner on merge 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,6 +1159,7 @@
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
         let manualNavMatches = []; // [{driverEntryId, navigatorEntryId}] — manually confirmed nav pairs
+        let csvUploadTimestamp = 0; // Unix ms — when the CSV was last uploaded via the file picker
         let currentView = 'dashboard';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
         let filterOutstandingPayment = false; // Filter for outstanding payments
@@ -1447,6 +1448,7 @@
             reader.onload = async (ev) => {
                 try {
                     parseCSV(ev.target.result);
+                    csvUploadTimestamp = Date.now(); // record when this CSV was uploaded
                     // IMPORTANT: pull from Dropbox first so we don't overwrite other users' checkbox changes
                     // when uploading a new CSV. syncFromDropbox() merges remote state into local before we push.
                     if (dropboxSyncEnabled) {
@@ -3775,10 +3777,12 @@
             const duration = type === 'success' ? 10000 : 4000;
             setTimeout(() => el.className = 'message', duration);
         }
+        let _dropboxSaveDebounceTimer = null;
         function saveToStorage() {
             const data = {
                 csvData,
                 csvHeaders,
+                csvUploadTimestamp,
                 docVerified,
                 photoIdVerified,
                 disclaimerChecked,
@@ -3793,9 +3797,14 @@
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
-            // Also sync to Dropbox if available (asynchronous, no wait)
+            // Debounced Dropbox push: wait 1.5s after last change, then pull-merge-push so we
+            // never overwrite another user's CSV or checkboxes with stale local data.
             if (dropboxSyncEnabled) {
-                syncToDropbox().catch(e => console.warn('Dropbox sync failed:', e));
+                clearTimeout(_dropboxSaveDebounceTimer);
+                _dropboxSaveDebounceTimer = setTimeout(async () => {
+                    await syncFromDropbox().catch(e => console.warn('⚠ Pre-save Dropbox pull failed:', e));
+                    await syncToDropbox().catch(e => console.warn('⚠ Dropbox save failed:', e));
+                }, 1500);
             }
         }
         function loadFromStorage() {
@@ -3805,6 +3814,7 @@
                     const data = JSON.parse(stored);
                     csvData = data.csvData || [];
                     csvHeaders = data.csvHeaders || [];
+                    csvUploadTimestamp = data.csvUploadTimestamp || 0;
                     docVerified = data.docVerified || {};
                     photoIdVerified = data.photoIdVerified || {};
                     disclaimerChecked = data.disclaimerChecked || {};
@@ -4068,6 +4078,7 @@
                 const state = {
                     csvData: csvData,
                     csvHeaders: csvHeaders,
+                    csvUploadTimestamp: csvUploadTimestamp,
                     docVerified: docVerified,
                     photoIdVerified: photoIdVerified,
                     disclaimerChecked: disclaimerChecked,
@@ -4162,24 +4173,30 @@
                     console.log('ℹ Remote state pulled from Dropbox, merging...');
                     let hasChanges = false;
 
-                    // MERGE STRATEGY: Intelligently merge user-input fields without overwriting local state
-                    // For CSV data: the remote state is the canonical source (uploaded by primary user).
-                    // Use remote wholesale when it has more entries; otherwise add any new IDs from remote.
+                    // MERGE STRATEGY for CSV data: whichever CSV was uploaded most recently wins.
+                    // Primary signal: csvUploadTimestamp (set when user uploads via file picker).
+                    // Fallback: entry count (more entries = newer upload).
                     if (remoteState.csvData && remoteState.csvHeaders) {
                         const remoteCount = remoteState.csvData.length;
                         const localCount  = csvData.length;
-                        if (remoteCount > localCount) {
-                            // Remote is more complete — replace local entirely
+                        const remoteTs    = remoteState.csvUploadTimestamp || 0;
+                        const localTs     = csvUploadTimestamp || 0;
+                        // Remote wins if: remote was uploaded more recently, OR remote has more entries
+                        // and neither has a timestamp advantage.
+                        const remoteWins  = remoteTs > localTs || (remoteTs === localTs && remoteCount > localCount);
+                        if (localCount === 0 && remoteCount === 0) {
+                            // Both empty — nothing to do
+                        } else if (remoteWins) {
+                            // Remote CSV is newer — replace local entirely
                             csvHeaders = remoteState.csvHeaders;
                             csvData    = remoteState.csvData;
+                            csvUploadTimestamp = remoteTs;
                             hasChanges = true;
-                            console.log('✓ CSV replaced from Dropbox:', remoteCount, 'entries (local had', localCount, ')');
-                        } else if (remoteCount === localCount && localCount === 0) {
-                            // Both empty — nothing to do
+                            console.log('✓ CSV replaced from Dropbox:', remoteCount, 'entries (local had', localCount,
+                                        '| remote ts:', remoteTs, 'local ts:', localTs, ')');
                         } else {
-                            // Local has more entries than remote (primary user has uploaded a newer CSV
-                            // that hasn't reached Dropbox yet). Keep local, but merge any remote rows
-                            // that are genuinely new (checked by entry ID to avoid duplication).
+                            // Local CSV is same age or newer — keep local, but add any new entry IDs from remote
+                            // (handles the case where remote has rows not yet in local due to network lag).
                             const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
                             const existingIds = new Set(
                                 entryIdIdx >= 0 ? csvData.map(r => r[entryIdIdx]).filter(Boolean) : []
@@ -4345,7 +4362,7 @@
                     // triggering a redundant Dropbox upload of data we just downloaded.
                     {
                         const _merged = {
-                            csvData, csvHeaders, docVerified, photoIdVerified,
+                            csvData, csvHeaders, csvUploadTimestamp, docVerified, photoIdVerified,
                             disclaimerChecked, disclaimerLocked,
                             withdrawn: Array.from(withdrawn),
                             navigationMarryEntries, carNumberAssignments,
