@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.61 - Version check: only alert when GitHub is strictly newer (fixes false alert when CDN lags) 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.62 - CSV upload: re-apply uploaded CSV after Dropbox pull so corrections are never overwritten by older remote data 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1145,7 +1145,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.61';
+        const DASHBOARD_VERSION = 'v3.62';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1453,17 +1453,41 @@
             reader.onload = async (ev) => {
                 try {
                     parseCSV(ev.target.result);
-                    csvUploadTimestamp = Date.now(); // record when this CSV was uploaded
-                    // IMPORTANT: pull from Dropbox first so we don't overwrite other users' checkbox changes
-                    // when uploading a new CSV. syncFromDropbox() merges remote state into local before we push.
+                    // Snapshot the explicitly uploaded CSV — this is authoritative for any
+                    // row it contains (corrections, phone number changes, category changes etc).
+                    const uploadedData    = csvData.slice();
+                    const uploadedHeaders = csvHeaders.slice();
+                    const uploadTs        = Date.now();
+                    const uploadedEntryIdIdx = uploadedHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                    const uploadedIds = new Set(
+                        uploadedEntryIdIdx >= 0 ? uploadedData.map(r => r[uploadedEntryIdIdx]).filter(Boolean).map(String) : []
+                    );
+
+                    // Pull from Dropbox to merge checkbox states and discover any entries
+                    // added to the form system AFTER this CSV was exported.
+                    // NOTE: syncFromDropbox() may replace csvData/csvHeaders — we'll re-apply the
+                    // uploaded data afterward so corrections are never lost.
                     if (dropboxSyncEnabled) {
-                        await syncFromDropbox().catch(e => console.warn('⚠ Pre-upload sync from Dropbox failed:', e));
+                        await syncFromDropbox().catch(e => console.warn('⚠ Pre-upload Dropbox pull failed:', e));
                     }
+
+                    // Re-establish uploaded CSV as the source of truth for existing entries.
+                    // Add any entries that are in the Dropbox version but NOT in this upload
+                    // (those are new sign-ups submitted after the export was generated).
+                    const remoteEntryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                    const extraRows = csvData.filter(row => {
+                        const rid = remoteEntryIdIdx >= 0 ? String(row[remoteEntryIdIdx] || '') : '';
+                        return rid && !uploadedIds.has(rid);
+                    });
+
+                    csvData            = [...uploadedData, ...extraRows];
+                    csvHeaders         = uploadedHeaders;
+                    csvUploadTimestamp = uploadTs;
+
                     saveToStorage();
-                    showMessage('csvMsg', 'success', `✓ Loaded ${csvData.length} entries`);
+                    const extraMsg = extraRows.length > 0 ? ` (+${extraRows.length} newer entries from Dropbox)` : '';
+                    showMessage('csvMsg', 'success', `✓ Loaded ${uploadedData.length} entries${extraMsg}`);
                     switchView('doc-chase');
-                    // Client-side verification - entries can be manually verified via checkboxes
-                    // Click "🔄 Recheck Dropbox" to refresh the verification status
                     renderDocTable();
                     updateDocStats();
                 } catch (err) {
