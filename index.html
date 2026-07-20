@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.55 - Fix blank dashboard on load: render dashboard initially, always re-render after Dropbox sync 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.56 - Fix checkbox sync: delete key on untick (never store false), strip false values in merge 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1977,7 +1977,7 @@
                 disclaimerCheckbox.checked = disclaimerChecked[entryId] || false;
                 disclaimerCheckbox.disabled = disclaimerLocked[entryId] || false;
                 disclaimerCheckbox.addEventListener('click', (e) => {
-                    disclaimerChecked[entryId] = e.target.checked;
+                    if (e.target.checked) { disclaimerChecked[entryId] = true; } else { delete disclaimerChecked[entryId]; }
                     saveToStorage();
                     updateDocStats();
                     updateRowStyling(idx);
@@ -1992,7 +1992,7 @@
                 photoIdCheckbox.type = 'checkbox';
                 photoIdCheckbox.checked = photoIdVerified[entryId] || false;
                 photoIdCheckbox.addEventListener('click', (e) => {
-                    photoIdVerified[entryId] = e.target.checked;
+                    if (e.target.checked) { photoIdVerified[entryId] = true; } else { delete photoIdVerified[entryId]; }
                     saveToStorage();
                     updateDocStats();
                     updateRowStyling(idx);
@@ -2041,7 +2041,7 @@
                 maLicenceCheckbox.disabled = maLicenceChecked[entryId + '_locked'] || false;
                 maLicenceCheckbox.title = maLicenceChecked[entryId + '_locked'] ? 'Verified via MA report' : 'Manual MA Licence check';
                 maLicenceCheckbox.addEventListener('click', (e) => {
-                    maLicenceChecked[entryId] = e.target.checked;
+                    if (e.target.checked) { maLicenceChecked[entryId] = true; } else { delete maLicenceChecked[entryId]; }
                     saveToStorage();
                     updateDocStats();
                     updateRowStyling(idx);
@@ -2592,7 +2592,7 @@
                     ? 'Auto-verified via MA Report — ' + maStatus
                     : (maStatus ? 'MA Report: ' + maStatus + ' — manual override' : 'Manual check — tick when verified');
                 cbOk.addEventListener('click', (e) => {
-                    maLicenceChecked[entryId] = e.target.checked;
+                    if (e.target.checked) { maLicenceChecked[entryId] = true; } else { delete maLicenceChecked[entryId]; }
                     saveToStorage();
                     updateDocStats();
                     filterDocuments();
@@ -4217,37 +4217,41 @@
                     // This ensures no checkbox data is lost when syncing across multiple users
                     let stateUpdated = false;
 
-                    // Merge docVerified: both local and remote true values win
+                    // Helper: strip explicit false values so the union merge only deals in true values.
+                    // Without this, an unticked checkbox stored as false:true would silence a true from the other user.
+                    const onlyTrue = obj => Object.fromEntries(Object.entries(obj).filter(([, v]) => v === true));
+
+                    // Merge docVerified: union of all true values from both local and remote
                     if (remoteState.docVerified && typeof remoteState.docVerified === 'object') {
-                        const merged = { ...remoteState.docVerified, ...docVerified };
-                        if (JSON.stringify(merged) !== JSON.stringify(docVerified)) {
+                        const merged = { ...onlyTrue(remoteState.docVerified), ...onlyTrue(docVerified) };
+                        if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(docVerified))) {
                             docVerified = merged;
                             stateUpdated = true;
                         }
                     }
 
-                    // Merge photoIdVerified: both local and remote true values win
+                    // Merge photoIdVerified: union of all true values from both local and remote
                     if (remoteState.photoIdVerified && typeof remoteState.photoIdVerified === 'object') {
-                        const merged = { ...remoteState.photoIdVerified, ...photoIdVerified };
-                        if (JSON.stringify(merged) !== JSON.stringify(photoIdVerified)) {
+                        const merged = { ...onlyTrue(remoteState.photoIdVerified), ...onlyTrue(photoIdVerified) };
+                        if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(photoIdVerified))) {
                             photoIdVerified = merged;
                             stateUpdated = true;
                         }
                     }
 
-                    // Merge disclaimerChecked: both local and remote true values win
+                    // Merge disclaimerChecked: union of all true values from both local and remote
                     if (remoteState.disclaimerChecked && typeof remoteState.disclaimerChecked === 'object') {
-                        const merged = { ...remoteState.disclaimerChecked, ...disclaimerChecked };
-                        if (JSON.stringify(merged) !== JSON.stringify(disclaimerChecked)) {
+                        const merged = { ...onlyTrue(remoteState.disclaimerChecked), ...onlyTrue(disclaimerChecked) };
+                        if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(disclaimerChecked))) {
                             disclaimerChecked = merged;
                             stateUpdated = true;
                         }
                     }
 
-                    // Merge disclaimerLocked: both local and remote true values win
+                    // Merge disclaimerLocked: union of all true values from both local and remote
                     if (remoteState.disclaimerLocked && typeof remoteState.disclaimerLocked === 'object') {
-                        const merged = { ...remoteState.disclaimerLocked, ...disclaimerLocked };
-                        if (JSON.stringify(merged) !== JSON.stringify(disclaimerLocked)) {
+                        const merged = { ...onlyTrue(remoteState.disclaimerLocked), ...onlyTrue(disclaimerLocked) };
+                        if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(disclaimerLocked))) {
                             disclaimerLocked = merged;
                             stateUpdated = true;
                         }
@@ -4328,10 +4332,10 @@
                         });
                     }
 
-                    // Merge maLicenceChecked: union of all checked entries
+                    // Merge maLicenceChecked: union of all true values (strip false so unticked local can't silence remote true)
                     if (remoteState.maLicenceChecked && typeof remoteState.maLicenceChecked === 'object') {
-                        const merged = { ...remoteState.maLicenceChecked, ...maLicenceChecked };
-                        if (JSON.stringify(merged) !== JSON.stringify(maLicenceChecked)) {
+                        const merged = { ...onlyTrue(remoteState.maLicenceChecked), ...onlyTrue(maLicenceChecked) };
+                        if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(maLicenceChecked))) {
                             maLicenceChecked = merged;
                             stateUpdated = true;
                         }
