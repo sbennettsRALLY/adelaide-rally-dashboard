@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.57 - Sync: pull-only auto-sync (no auto-push), strip false values before Dropbox push 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.58 - Add Import from Excel (Document Chase) to inject photoIdVerified/disclaimerChecked and push to Dropbox 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -723,6 +723,8 @@
                 <select id="docFilterCategory" class="fsel" onchange="filterDocuments()">
                 </select>
                 <button class="btn-reset" onclick="syncVerificationFromDropbox()" style="margin-left: auto;">🔄 DocuSign Check</button>
+                <input type="file" id="excelImportInput" accept=".xlsx,.xls" style="display:none" onchange="importVerificationFromExcel(this.files[0])">
+                <button class="btn-reset" onclick="document.getElementById('excelImportInput').click()" title="Import Photo ID and Disclaimer ticks from an exported Excel file">📥 Import Excel</button>
             </div>
             <div class="stat-row">
                 <div class="stat-chip" id="totalBtn" onclick="showAllEntries()" style="cursor: pointer;">
@@ -1867,6 +1869,44 @@
 
             document.getElementById('totalSalesEntries').textContent = totalSalesEntries;
             document.getElementById('totalSalesIncome').textContent = '$' + totalSalesIncome.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        }
+
+        async function importVerificationFromExcel(file) {
+            if (!file) return;
+            try {
+                const data = await file.arrayBuffer();
+                const wb = XLSX.read(data, { type: 'array' });
+                const ws = wb.Sheets['Document Chase'];
+                if (!ws) { alert('No "Document Chase" sheet found in this file.'); return; }
+                const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                if (rows.length < 2) { alert('Document Chase sheet appears empty.'); return; }
+                const headers = rows[0];
+                const photoIdx = headers.findIndex(h => h && h.toString().toLowerCase().includes('photo id'));
+                const discIdx  = headers.findIndex(h => h && h.toString().toLowerCase().includes('disclaimer'));
+                if (photoIdx < 0 || discIdx < 0) { alert('Could not find Photo ID or Disclaimer columns.'); return; }
+                let addedPhoto = 0, addedDisc = 0;
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const entryId = row[0] != null ? String(row[0]).trim() : '';
+                    if (!entryId) continue;
+                    const photoVal = row[photoIdx];
+                    const discVal  = row[discIdx];
+                    if (photoVal === '✓' || photoVal === true || photoVal === 1) {
+                        if (!photoIdVerified[entryId]) { photoIdVerified[entryId] = true; addedPhoto++; }
+                    }
+                    if (discVal === '✓' || discVal === true || discVal === 1) {
+                        if (!disclaimerChecked[entryId]) { disclaimerChecked[entryId] = true; addedDisc++; }
+                    }
+                }
+                saveToStorage();
+                renderDocTable();
+                showMessage('docMsg', 'info', `⏳ Imported +${addedPhoto} Photo IDs, +${addedDisc} Disclaimers — pushing to Dropbox…`);
+                await syncToDropbox().catch(e => console.warn('⚠ Post-import Dropbox push failed:', e));
+                showMessage('docMsg', 'success', `✅ Import complete: +${addedPhoto} Photo IDs, +${addedDisc} Disclaimers. Dropbox updated.`);
+            } catch(e) {
+                alert('Error reading Excel file: ' + e.message);
+            }
+            document.getElementById('excelImportInput').value = '';
         }
 
         function renderDocTable() {
