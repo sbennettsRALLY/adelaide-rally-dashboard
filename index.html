@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.60 - Export: add Licence OK to Doc Chase & MA Licence Checks sheets; CSV merge prefers more entries over newer timestamp 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.61 - Version check: only alert when GitHub is strictly newer (fixes false alert when CDN lags) 2026-07-20 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1145,7 +1145,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.60';
+        const DASHBOARD_VERSION = 'v3.61';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -3904,7 +3904,10 @@
                 const match = text.match(/Adelaide Rally 2026 Dashboard (v[\d.]+)/);
                 if (!match) return;
                 const latestVersion = match[1];
-                if (latestVersion !== DASHBOARD_VERSION) {
+                // Only show banner if GitHub has a NEWER version — not just a different one.
+                // Prevents false alerts when raw.githubusercontent.com CDN lags behind a fresh deploy.
+                const parseVer = v => { const m = (v||'').match(/v(\d+)\.(\d+)/); return m ? parseInt(m[1])*1000+parseInt(m[2]) : 0; };
+                if (parseVer(latestVersion) > parseVer(DASHBOARD_VERSION)) {
                     showUpdateBanner(latestVersion);
                 }
             } catch(e) { /* silent — version check is non-critical */ }
