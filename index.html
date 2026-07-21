@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.62 - CSV upload: re-apply uploaded CSV after Dropbox pull so corrections are never overwritten by older remote data 2026-07-20 -->
+<!-- Adelaide Rally 2026 Dashboard v3.63 - Multi-user sync: startup loading overlay, Dropbox disconnect banner, force sync button, auto push-back when local has changes remote doesn't 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -530,6 +530,18 @@
 
 </head>
 <body>
+    <!-- Dropbox Disconnect Banner — shown when token expires or sync fails -->
+    <div id="dropbox-disconnect-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:300;background:#c0392b;color:#fff;text-align:center;padding:10px 20px;font-size:13px;font-weight:600;display:none;align-items:center;justify-content:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.4)">
+        ⚠️ Dropbox sync disconnected — you may be viewing <strong>stale data</strong> that doesn't match other users.
+        <button onclick="initiateDropboxAuth()" style="background:#fff;color:#c0392b;border:none;padding:5px 14px;border-radius:4px;cursor:pointer;font-weight:700;font-size:13px;">Reconnect Now</button>
+        <button onclick="document.getElementById('dropbox-disconnect-banner').style.display='none'" style="background:transparent;color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.4);padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px;">Dismiss</button>
+    </div>
+    <!-- Startup Loading Overlay — shown until initial Dropbox pull completes -->
+    <div id="dropbox-loading-overlay" style="display:none;position:fixed;inset:0;z-index:250;background:rgba(255,255,255,0.92);align-items:center;justify-content:center;flex-direction:column;gap:16px">
+        <div style="font-size:36px">☁️</div>
+        <div style="font-size:16px;font-weight:600;color:#333">Syncing with Dropbox…</div>
+        <div style="font-size:13px;color:#666">Loading the latest data for all users</div>
+    </div>
     <!-- Preview Mode Detection Banner -->
     <div id="previewWarning" style="display:none; background:#fff3cd; border:2px solid #ff9800; padding:16px; margin:8px; border-radius:8px; text-align:center; position:fixed; top:0; left:0; right:0; z-index:9999; font-size:14px; font-weight:bold;">
         ⚠️ <strong>File is in preview mode.</strong> Click the <strong>"Open"</strong> button above to open in full browser. Dashboard won't work in preview. 
@@ -557,6 +569,7 @@
             </div>
             <div class="hdr-actions">
                 <button class="dropbox-auth-btn" id="dropboxAuthBtn" onclick="initiateDropboxAuth()">Connect to Server</button>
+                <button class="btn-reset" id="dropboxForceSyncBtn" onclick="forceSyncFromDropbox()" style="display:none;font-size:11px;padding:3px 8px;" title="Force pull latest data from Dropbox (overwrites local state)">↻ Force Sync</button>
                 <div class="dropbox-status" id="dropboxStatus">✓ Connected</div>
                 <div class="countdown-box">
                     <div class="countdown-num" id="weeksToEvent">--</div>
@@ -1145,7 +1158,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.62';
+        const DASHBOARD_VERSION = 'v3.63';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1419,13 +1432,19 @@
                     console.log('✓ Migration v3.15: cleared car #921-929 (Porsche Club → Porsche Centre Adelaide)');
                 }
             })();
-            // Initialize Dropbox sync with SDK load waiting
-            initDropboxSyncWhenReady();
-            // Render the dashboard (default view) if data is already available from localStorage.
-            // syncFromDropbox() will re-render once Dropbox data arrives.
-            if (csvData.length > 0) {
-                switchView('dashboard', false);
+            // Initialize Dropbox sync with SDK load waiting.
+            // If a Dropbox token exists, show the loading overlay so the user sees Dropbox
+            // data (not stale localStorage) on first render. initDropboxSync() hides the
+            // overlay once the pull completes (or falls back to localStorage on failure).
+            const hasDropboxToken = !!localStorage.getItem('dropbox_access_token');
+            if (hasDropboxToken) {
+                const overlay = document.getElementById('dropbox-loading-overlay');
+                if (overlay) overlay.style.display = 'flex';
+            } else {
+                // No Dropbox — render from localStorage immediately
+                if (csvData.length > 0) switchView('dashboard', false);
             }
+            initDropboxSyncWhenReady();
             // Version check: run once after 5s, then every 5 minutes
             setTimeout(() => { checkForUpdates(); setInterval(checkForUpdates, 5 * 60 * 1000); }, 5000);
             // Stop sync and save before unload
@@ -4097,18 +4116,29 @@
             const token = localStorage.getItem('dropbox_access_token');
             const authBtn = document.getElementById('dropboxAuthBtn');
             const statusDiv = document.getElementById('dropboxStatus');
+            const forceSyncBtn = document.getElementById('dropboxForceSyncBtn');
+            const disconnectBanner = document.getElementById('dropbox-disconnect-banner');
 
             if (errorMsg) {
-                // Sync is failing — show error state and reconnect button
+                // Sync is failing — show error state, reconnect button, and prominent banner
                 authBtn.style.display = 'inline-block';
+                if (forceSyncBtn) forceSyncBtn.style.display = 'none';
                 statusDiv.classList.remove('connected');
                 statusDiv.classList.add('sync-error');
                 statusDiv.textContent = '⚠ ' + errorMsg;
                 statusDiv.style.display = 'inline-block';
                 dropboxSyncEnabled = false;
+                // Show full-width disconnect banner — critical so users know data may be stale
+                if (disconnectBanner) disconnectBanner.style.display = 'flex';
+                // Push the sticky header down so the banner doesn't cover it
+                setTimeout(() => {
+                    const hdr = document.querySelector('.hdr');
+                    if (hdr && disconnectBanner) hdr.style.top = disconnectBanner.offsetHeight + 'px';
+                }, 50);
             } else if (token) {
                 // Token present — show connected with last sync time
                 authBtn.style.display = 'none';
+                if (forceSyncBtn) forceSyncBtn.style.display = 'inline-block';
                 statusDiv.classList.remove('sync-error');
                 statusDiv.classList.add('connected');
                 if (lastSyncTimestamp) {
@@ -4121,12 +4151,87 @@
                     statusDiv.textContent = '✓ Connected';
                 }
                 statusDiv.style.display = 'inline-block';
+                // Hide disconnect banner (if it was showing from a previous error)
+                if (disconnectBanner) disconnectBanner.style.display = 'none';
+                const hdr = document.querySelector('.hdr');
+                if (hdr) hdr.style.top = '';
             } else {
-                // No token — show reconnect button
+                // No token — show reconnect button and disconnect banner
                 authBtn.style.display = 'inline-block';
+                if (forceSyncBtn) forceSyncBtn.style.display = 'none';
                 statusDiv.classList.remove('connected');
                 statusDiv.classList.remove('sync-error');
                 statusDiv.style.display = 'none';
+                // Show disconnect banner when not connected at all
+                if (disconnectBanner) disconnectBanner.style.display = 'flex';
+                setTimeout(() => {
+                    const hdr = document.querySelector('.hdr');
+                    if (hdr && disconnectBanner) hdr.style.top = disconnectBanner.offsetHeight + 'px';
+                }, 50);
+            }
+        }
+
+        // Hard-replace all local state from Dropbox — bypasses merge logic.
+        // Use this when your local data is known to be out of date.
+        async function forceSyncFromDropbox() {
+            const btn = document.getElementById('dropboxForceSyncBtn');
+            if (btn) { btn.textContent = '⏳ Syncing…'; btn.disabled = true; }
+            try {
+                const token = await getValidDropboxToken();
+                if (!token) { alert('Not connected to Dropbox. Please reconnect first.'); return; }
+                const linkResponse = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: DROPBOX_STATE_FILE })
+                });
+                if (!linkResponse.ok) {
+                    alert('Could not reach Dropbox. Check your connection and try again.');
+                    return;
+                }
+                const linkData = await linkResponse.json();
+                const response = await fetch(linkData.link, { mode: 'cors', credentials: 'omit' });
+                if (!response.ok) { alert('Failed to download state from Dropbox.'); return; }
+                const remoteState = JSON.parse(await response.text());
+
+                // Hard-replace — no merge, Dropbox wins everything
+                if (remoteState.csvData && remoteState.csvHeaders) {
+                    csvData = remoteState.csvData;
+                    csvHeaders = remoteState.csvHeaders;
+                    csvUploadTimestamp = remoteState.csvUploadTimestamp || 0;
+                }
+                const _ot = obj => obj && typeof obj === 'object'
+                    ? Object.fromEntries(Object.entries(obj).filter(([,v]) => v === true)) : {};
+                docVerified          = _ot(remoteState.docVerified);
+                photoIdVerified      = _ot(remoteState.photoIdVerified);
+                disclaimerChecked    = _ot(remoteState.disclaimerChecked);
+                disclaimerLocked     = _ot(remoteState.disclaimerLocked);
+                withdrawn            = new Set(Array.isArray(remoteState.withdrawn) ? remoteState.withdrawn.map(String) : []);
+                navigationMarryEntries = Array.isArray(remoteState.navigationMarryEntries) ? remoteState.navigationMarryEntries : [];
+                carNumberAssignments = remoteState.carNumberAssignments || {};
+                customCarSlots       = Array.isArray(remoteState.customCarSlots) ? remoteState.customCarSlots : [];
+                manualNavMatches     = Array.isArray(remoteState.manualNavMatches) ? remoteState.manualNavMatches : [];
+                maLicenceVerification = remoteState.maLicenceVerification || {};
+                maLicenceChecked     = _ot(remoteState.maLicenceChecked);
+                maExpiryOverride     = remoteState.maExpiryOverride || {};
+
+                // Persist hard-replaced state to localStorage
+                const _merged = {
+                    csvData, csvHeaders, csvUploadTimestamp, docVerified, photoIdVerified,
+                    disclaimerChecked, disclaimerLocked,
+                    withdrawn: Array.from(withdrawn), navigationMarryEntries,
+                    carNumberAssignments, customCarSlots, manualNavMatches,
+                    maLicenceVerification, maLicenceChecked, maExpiryOverride,
+                    migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]')
+                };
+                localStorage.setItem('adelaideRallyData', JSON.stringify(_merged));
+                lastSyncTimestamp = Date.now();
+                updateDropboxStatus();
+                if (csvData.length > 0) switchView(currentView, false);
+                console.log('✓ Force sync from Dropbox complete. Entries:', csvData.length);
+            } catch(e) {
+                alert('Force sync failed: ' + e.message);
+            } finally {
+                if (btn) { btn.textContent = '↻ Force Sync'; btn.disabled = false; }
             }
         }
 
@@ -4152,24 +4257,46 @@
                 if (!token) {
                     console.error('✗ No Dropbox token found - user must authenticate');
                     updateDropboxStatus();
+                    // Hide loading overlay — fall back to localStorage data
+                    const overlay = document.getElementById('dropbox-loading-overlay');
+                    if (overlay) overlay.style.display = 'none';
+                    if (csvData.length > 0) switchView('dashboard', false);
                     return;
                 }
                 dropboxSyncEnabled = true;
                 console.log('✓ Dropbox REST API sync initialized');
-                // Immediately sync from Dropbox (syncFromDropbox re-renders the current view)
-                await syncFromDropbox();
-                // Set up periodic bidirectional sync: pull remote changes first, then push merged state
-                // Pull-only auto-sync: read the latest from Dropbox every 5 seconds so this user
-                // always sees other users' changes. Pushes only happen via saveToStorage() when
-                // THIS user makes a change — never automatically, to avoid overwriting others.
+                // Initial pull — show overlay so users see Dropbox data, not stale localStorage
+                const localAheadOnInit = await syncFromDropbox();
+                // Hide loading overlay now that Dropbox data is loaded
+                const overlay = document.getElementById('dropbox-loading-overlay');
+                if (overlay) overlay.style.display = 'none';
+                // If local had state Dropbox didn't, push it now so other users can see it
+                if (localAheadOnInit) {
+                    console.log('ℹ Local had state not in Dropbox on init — pushing to sync others');
+                    await syncToDropbox().catch(e => console.warn('⚠ Init push-back to Dropbox failed:', e));
+                }
+                // Auto-sync: pull every 5s. If local has state Dropbox doesn't (e.g., race condition
+                // where another user's push overwrote our recent tick), push it back automatically.
+                // This ensures no checkbox ticks are stranded in one user's localStorage.
                 dropboxSyncTimer = setInterval(async () => {
                     if (dropboxSyncEnabled) {
-                        await syncFromDropbox().catch(e => console.warn('⚠ Auto-sync from Dropbox failed:', e));
+                        const localAhead = await syncFromDropbox().catch(e => {
+                            console.warn('⚠ Auto-sync from Dropbox failed:', e);
+                            return false;
+                        });
+                        if (localAhead) {
+                            console.log('ℹ Auto-sync: local ahead of Dropbox — pushing back');
+                            await syncToDropbox().catch(e => console.warn('⚠ Auto push-back failed:', e));
+                        }
                     }
                 }, DROPBOX_SYNC_INTERVAL);
             } catch (error) {
                 console.error('Error initializing Dropbox sync:', error);
                 dropboxSyncEnabled = false;
+                // Hide loading overlay on error — fall back to localStorage
+                const overlay = document.getElementById('dropbox-loading-overlay');
+                if (overlay) overlay.style.display = 'none';
+                if (csvData.length > 0) switchView('dashboard', false);
             }
         }
         async function syncToDropbox() {
@@ -4240,12 +4367,12 @@
             }
         }
         async function syncFromDropbox() {
-            if (!dropboxSyncEnabled) return;
+            if (!dropboxSyncEnabled) return false;
             try {
                 let token = await getValidDropboxToken();
                 if (!token) {
                     console.warn('⚠ No Dropbox token available');
-                    return;
+                    return false;
                 }
 
                 // Use get_temporary_link to avoid CORS restriction on content.dropboxapi.com/download
@@ -4281,23 +4408,25 @@
                     const remoteState = JSON.parse(text);
                     console.log('ℹ Remote state pulled from Dropbox, merging...');
                     let hasChanges = false;
+                    let localAhead = false; // true if local had state that wasn't in Dropbox
 
-                    // MERGE STRATEGY for CSV data: more entries always wins.
-                    // Rally entries only accumulate — a larger CSV is always more complete.
-                    // Timestamp is only used as a tiebreaker when entry counts are equal.
-                    // (Previous behaviour — newer timestamp wins — caused older CSVs to overwrite
-                    //  newer ones whenever a user uploaded an older export more recently.)
+                    // MERGE STRATEGY for CSV data: newer upload timestamp wins.
+                    // The CSV from the entry system is always a complete export of ALL current
+                    // entries. The most recently uploaded CSV is therefore the most authoritative.
+                    // (v3.60 switched to "more rows wins" to prevent an accidentally older file
+                    //  from overwriting a larger master — but this broke propagation of corrected
+                    //  CSVs from the master user to others who had a locally larger stale copy.)
                     if (remoteState.csvData && remoteState.csvHeaders) {
                         const remoteCount = remoteState.csvData.length;
                         const localCount  = csvData.length;
                         const remoteTs    = remoteState.csvUploadTimestamp || 0;
                         const localTs     = csvUploadTimestamp || 0;
-                        // Remote wins if it has MORE entries, or same count but was uploaded more recently.
-                        const remoteWins  = remoteCount > localCount || (remoteCount === localCount && remoteTs > localTs);
+                        // Remote wins if its upload was more recent (or local has no CSV at all).
+                        const remoteWins  = localCount === 0 || remoteTs > localTs;
                         if (localCount === 0 && remoteCount === 0) {
                             // Both empty — nothing to do
                         } else if (remoteWins) {
-                            // Remote CSV is newer — replace local entirely
+                            // Remote CSV was uploaded more recently — replace local entirely
                             csvHeaders = remoteState.csvHeaders;
                             csvData    = remoteState.csvData;
                             csvUploadTimestamp = remoteTs;
@@ -4305,8 +4434,8 @@
                             console.log('✓ CSV replaced from Dropbox:', remoteCount, 'entries (local had', localCount,
                                         '| remote ts:', remoteTs, 'local ts:', localTs, ')');
                         } else {
-                            // Local CSV is same age or newer — keep local, but add any new entry IDs from remote
-                            // (handles the case where remote has rows not yet in local due to network lag).
+                            // Local CSV was uploaded more recently — keep it, but add any new
+                            // entry IDs from remote (handles rows added after this upload).
                             const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
                             const existingIds = new Set(
                                 entryIdIdx >= 0 ? csvData.map(r => r[entryIdIdx]).filter(Boolean) : []
@@ -4317,6 +4446,7 @@
                                 if (remoteId && !existingIds.has(remoteId)) {
                                     csvData.push(remoteRow);
                                     hasChanges = true;
+                                    localAhead = true; // local has extra rows Dropbox doesn't
                                 }
                             });
                             if (hasChanges) console.log('✓ Merged CSV — added rows from Dropbox. Total:', csvData.length);
@@ -4331,8 +4461,15 @@
                     // Without this, an unticked checkbox stored as false:true would silence a true from the other user.
                     const onlyTrue = obj => Object.fromEntries(Object.entries(obj).filter(([, v]) => v === true));
 
+                    // Helper: check if local has keys that remote doesn't (local is ahead)
+                    const isLocalAhead = (remoteObj, localObj) => {
+                        const remoteKeys = new Set(Object.keys(onlyTrue(remoteObj || {})));
+                        return Object.keys(onlyTrue(localObj || {})).some(k => !remoteKeys.has(k));
+                    };
+
                     // Merge docVerified: union of all true values from both local and remote
                     if (remoteState.docVerified && typeof remoteState.docVerified === 'object') {
+                        if (isLocalAhead(remoteState.docVerified, docVerified)) localAhead = true;
                         const merged = { ...onlyTrue(remoteState.docVerified), ...onlyTrue(docVerified) };
                         if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(docVerified))) {
                             docVerified = merged;
@@ -4342,6 +4479,7 @@
 
                     // Merge photoIdVerified: union of all true values from both local and remote
                     if (remoteState.photoIdVerified && typeof remoteState.photoIdVerified === 'object') {
+                        if (isLocalAhead(remoteState.photoIdVerified, photoIdVerified)) localAhead = true;
                         const merged = { ...onlyTrue(remoteState.photoIdVerified), ...onlyTrue(photoIdVerified) };
                         if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(photoIdVerified))) {
                             photoIdVerified = merged;
@@ -4351,6 +4489,7 @@
 
                     // Merge disclaimerChecked: union of all true values from both local and remote
                     if (remoteState.disclaimerChecked && typeof remoteState.disclaimerChecked === 'object') {
+                        if (isLocalAhead(remoteState.disclaimerChecked, disclaimerChecked)) localAhead = true;
                         const merged = { ...onlyTrue(remoteState.disclaimerChecked), ...onlyTrue(disclaimerChecked) };
                         if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(disclaimerChecked))) {
                             disclaimerChecked = merged;
@@ -4360,6 +4499,7 @@
 
                     // Merge disclaimerLocked: union of all true values from both local and remote
                     if (remoteState.disclaimerLocked && typeof remoteState.disclaimerLocked === 'object') {
+                        if (isLocalAhead(remoteState.disclaimerLocked, disclaimerLocked)) localAhead = true;
                         const merged = { ...onlyTrue(remoteState.disclaimerLocked), ...onlyTrue(disclaimerLocked) };
                         if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(disclaimerLocked))) {
                             disclaimerLocked = merged;
@@ -4444,6 +4584,7 @@
 
                     // Merge maLicenceChecked: union of all true values (strip false so unticked local can't silence remote true)
                     if (remoteState.maLicenceChecked && typeof remoteState.maLicenceChecked === 'object') {
+                        if (isLocalAhead(remoteState.maLicenceChecked, maLicenceChecked)) localAhead = true;
                         const merged = { ...onlyTrue(remoteState.maLicenceChecked), ...onlyTrue(maLicenceChecked) };
                         if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(maLicenceChecked))) {
                             maLicenceChecked = merged;
@@ -4493,19 +4634,23 @@
                     } else {
                         console.log('ℹ Sync complete - no changes detected');
                     }
-                    // Always refresh the current view after a Dropbox sync — this covers the case
-                    // where the initial page load called switchView before Dropbox data arrived,
-                    // leaving the dashboard blank when no changes were detected.
+                    if (localAhead) {
+                        console.log('ℹ Local has state not yet in Dropbox — will push back');
+                    }
+                    // Always refresh the current view after a Dropbox sync
                     if (csvData.length > 0) {
                         switchView(currentView, false);
                     }
+                    return localAhead;
                 } else {
                     // CDN link returned non-ok — log but don't disable sync; uploads still work
                     console.warn('⚠ Dropbox CDN download returned:', response.status);
+                    return false;
                 }
             } catch (error) {
                 // Transient errors (CORS, network) — don't disable sync; uploads can still succeed
                 console.warn('⚠ Error syncing from Dropbox:', error.message);
+                return false;
             }
         }
         async function loadFromDropbox() {
