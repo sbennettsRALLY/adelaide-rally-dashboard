@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.72 - Sync diagnostics: show row count + account email in status, Force Sync reveals what Dropbox contained 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.73 - Fix maLicenceChecked/maLicenceVerification merge bugs + add Force Push button 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -571,6 +571,7 @@
                 <span id="versionBadge" style="font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;letter-spacing:0.03em;margin-right:4px;"></span>
                 <button class="dropbox-auth-btn" id="dropboxAuthBtn" onclick="initiateDropboxAuth()">Connect to Server</button>
                 <button class="btn-reset" id="dropboxForceSyncBtn" onclick="forceSyncFromDropbox()" style="display:none;font-size:11px;padding:3px 8px;" title="Force pull latest data from Dropbox (overwrites local state)">↻ Force Sync</button>
+                <button class="btn-reset" id="dropboxForcePushBtn" onclick="forcePushToDropbox()" style="display:none;font-size:11px;padding:3px 8px;background:#c0720a;color:#fff;" title="Force push YOUR data to Dropbox — use when others have wrong data and need to pull yours">⬆ Force Push</button>
                 <div class="dropbox-status" id="dropboxStatus">✓ Connected</div>
                 <div class="countdown-box">
                     <div class="countdown-num" id="weeksToEvent">--</div>
@@ -1159,7 +1160,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.72';
+        const DASHBOARD_VERSION = 'v3.73';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4154,12 +4155,14 @@
             const authBtn = document.getElementById('dropboxAuthBtn');
             const statusDiv = document.getElementById('dropboxStatus');
             const forceSyncBtn = document.getElementById('dropboxForceSyncBtn');
+            const forcePushBtn = document.getElementById('dropboxForcePushBtn');
             const disconnectBanner = document.getElementById('dropbox-disconnect-banner');
 
             if (errorMsg) {
                 // Sync is failing — show error state, reconnect button, and prominent banner
                 authBtn.style.display = 'inline-block';
                 if (forceSyncBtn) forceSyncBtn.style.display = 'none';
+                if (forcePushBtn) forcePushBtn.style.display = 'none';
                 statusDiv.classList.remove('connected');
                 statusDiv.classList.add('sync-error');
                 statusDiv.textContent = '⚠ ' + errorMsg;
@@ -4176,6 +4179,7 @@
                 // Token present — verify sync is actually recent before showing green
                 authBtn.style.display = 'none';
                 if (forceSyncBtn) forceSyncBtn.style.display = 'inline-block';
+                if (forcePushBtn) forcePushBtn.style.display = 'inline-block';
                 const staleThreshold = DROPBOX_SYNC_INTERVAL * 6; // 30s: if 6+ auto-sync cycles missed, something is wrong
                 const isStale = lastSyncTimestamp && (Date.now() - lastSyncTimestamp) > staleThreshold;
                 if (isStale) {
@@ -4220,6 +4224,7 @@
                 // No token — show reconnect button and disconnect banner
                 authBtn.style.display = 'inline-block';
                 if (forceSyncBtn) forceSyncBtn.style.display = 'none';
+                if (forcePushBtn) forcePushBtn.style.display = 'none';
                 statusDiv.classList.remove('connected');
                 statusDiv.classList.remove('sync-error');
                 statusDiv.style.display = 'none';
@@ -4322,6 +4327,40 @@
                 alert('Force sync failed: ' + e.message);
             } finally {
                 if (btn) { btn.textContent = '↻ Force Sync'; btn.disabled = false; }
+            }
+        }
+
+        // Force-push local state to Dropbox, overwriting whatever is there.
+        // Use this when YOUR data is correct and others are pulling wrong data from Dropbox.
+        // The bad user should then click Force Sync to pull your now-correct Dropbox state.
+        async function forcePushToDropbox() {
+            if (!confirm(
+                'Force Push will OVERWRITE Dropbox with your current local data.\n\n' +
+                'Use this when your data is correct and others are pulling wrong data.\n' +
+                'After pushing, ask the affected user to click Force Sync.\n\n' +
+                'Your current data: ' + csvData.length + ' rows, ' +
+                withdrawn.size + ' withdrawn, ' +
+                Object.keys(photoIdVerified).length + ' photo IDs verified, ' +
+                Object.values(maLicenceChecked).filter(v => v === true).length + ' MA licences checked.\n\n' +
+                'Proceed?'
+            )) return;
+            const btn = document.getElementById('dropboxForcePushBtn');
+            if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
+            try {
+                await syncToDropbox();
+                alert(
+                    '✓ Force push complete.\n\n' +
+                    'Dropbox now has your data:\n' +
+                    '  ' + csvData.length + ' rows\n' +
+                    '  ' + withdrawn.size + ' withdrawn\n' +
+                    '  ' + Object.keys(photoIdVerified).length + ' photo IDs verified\n' +
+                    '  ' + Object.values(maLicenceChecked).filter(v => v === true).length + ' MA licences checked\n\n' +
+                    'Ask the affected user to click Force Sync now.'
+                );
+            } catch(e) {
+                alert('Force push failed: ' + e.message);
+            } finally {
+                if (btn) { btn.textContent = '⬆ Force Push'; btn.disabled = false; }
             }
         }
 
@@ -4767,16 +4806,23 @@
                         }
                     }
 
-                    // Merge maLicenceChecked: "remote wins per-entry" — NOT union-true.
-                    // Unlike other checkbox fields, MA licence checks CAN be unticked (correction).
-                    // Remote value takes precedence for any entry Dropbox has seen (true OR false).
-                    // Local-only entries (not yet pushed to Dropbox) are preserved.
+                    // Merge maLicenceChecked: "true wins per-entry" with safe false propagation.
+                    // Remote true always wins (propagates ticks to others).
+                    // Remote false only wins when local also has no true (propagates unticks to
+                    // users who never ticked, but does NOT silence a local true with a remote false).
+                    // Rationale: a corrupt Dropbox push with false values must never overwrite a
+                    // user's correct true — that's unrecoverable without Force Push. A missed untick
+                    // propagation is recoverable (coordinator can re-untick manually).
                     if (remoteState.maLicenceChecked && typeof remoteState.maLicenceChecked === 'object') {
                         const merged = { ...maLicenceChecked }; // start with local
                         Object.entries(remoteState.maLicenceChecked).forEach(([k, v]) => {
-                            merged[k] = v; // remote wins per-entry (propagates both ticks and unticks)
+                            if (v === true) {
+                                merged[k] = true; // remote true always wins
+                            } else if (!merged[k]) {
+                                merged[k] = v; // remote false only when local has nothing
+                            }
+                            // remote false + local true → local true survives
                         });
-                        // Check if local has entries not in remote (we'll need to push them back)
                         const remoteKeys = new Set(Object.keys(remoteState.maLicenceChecked));
                         if (Object.keys(maLicenceChecked).some(k => !remoteKeys.has(k) && maLicenceChecked[k])) {
                             localAhead = true;
@@ -4787,15 +4833,16 @@
                         }
                     }
 
-                    // Merge maLicenceVerification: remote wins if remote has more licence entries, local wins on conflict.
-                    // If local has more entries than remote, signal push-back.
+                    // Merge maLicenceVerification: union-merge by licence number key.
+                    // Previously used count comparison only — same count but different content meant
+                    // silent divergence. Now checks actual keys so any local-only entry triggers push-back.
                     if (remoteState.maLicenceVerification && typeof remoteState.maLicenceVerification === 'object') {
-                        const localCount = Object.keys(maLicenceVerification).length;
-                        const remoteCount = Object.keys(remoteState.maLicenceVerification).length;
-                        if (localCount > remoteCount) {
-                            localAhead = true; // local PDF has more data — push it to Dropbox
-                        } else if (remoteCount > localCount) {
-                            maLicenceVerification = { ...remoteState.maLicenceVerification, ...maLicenceVerification };
+                        const remoteKeys = new Set(Object.keys(remoteState.maLicenceVerification));
+                        const localKeys  = new Set(Object.keys(maLicenceVerification));
+                        if ([...localKeys].some(k => !remoteKeys.has(k))) localAhead = true;
+                        const merged = { ...remoteState.maLicenceVerification, ...maLicenceVerification };
+                        if (JSON.stringify(merged) !== JSON.stringify(maLicenceVerification)) {
+                            maLicenceVerification = merged;
                             stateUpdated = true;
                         }
                     }
