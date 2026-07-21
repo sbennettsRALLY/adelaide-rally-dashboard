@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.73 - Fix maLicenceChecked/maLicenceVerification merge bugs + add Force Push button 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.73 - Fix maLicenceChecked/maLicenceVerification merge bugs, Force Push button, account_info.read scope 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -4009,7 +4009,7 @@
         // Dropbox OAuth Configuration
         const DROPBOX_CLIENT_ID = 'xr6w6l4uv3nrenl'; // Your registered Dropbox app Client ID
         const DROPBOX_REDIRECT_URI = window.location.origin + window.location.pathname;
-        const DROPBOX_SCOPE = 'files.content.read files.content.write';
+        const DROPBOX_SCOPE = 'files.content.read files.content.write account_info.read';
 
         // Dropbox Cloud Sync Functions
         let dropboxSyncEnabled = false;
