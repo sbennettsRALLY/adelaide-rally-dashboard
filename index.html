@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.70 - Fix MA licence sync: pull-then-push on tick/untick prevents overwriting concurrent changes 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.71 - Fix withdrawn sync: per-entry withdrawnAt/restoredAt timestamps replace global last-writer-wins 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.70';
+        const DASHBOARD_VERSION = 'v3.71';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1176,9 +1176,13 @@
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
         let manualNavMatches = []; // [{driverEntryId, navigatorEntryId}] — manually confirmed nav pairs
-        // Per-field timestamps — used for last-writer-wins merge on fields where DELETION must propagate.
-        // Without these, union-only merge means removals (restore, unassign, unmatch, remove slot) never sync.
-        let withdrawnTimestamp = 0;
+        // Per-entry withdraw/restore timestamps — union-max merge per entry key.
+        // Replaces the global withdrawnTimestamp (last-writer-wins), which caused the sparse-
+        // state-overwrites-complete-state bug when any user made a withdrawal after others.
+        let withdrawnAt = {}; // {[entryId]: timestamp} — when this entry was last withdrawn
+        let restoredAt  = {}; // {[entryId]: timestamp} — when this entry was last restored
+        // withdrawn Set is computed from withdrawnAt/restoredAt by recomputeWithdrawn().
+        // All rendering code uses withdrawn.has() unchanged.
         let carNumberTimestamp = 0;
         let customCarSlotsTimestamp = 0;
         let manualNavMatchesTimestamp = 0;
@@ -3887,7 +3891,9 @@
                 photoIdVerified,
                 disclaimerChecked,
                 disclaimerLocked,
-                withdrawn: Array.from(withdrawn),
+                withdrawn: Array.from(withdrawn), // computed — kept for backward-compat reads
+                withdrawnAt,
+                restoredAt,
                 carNumberAssignments,
                 customCarSlots,
                 manualNavMatches,
@@ -3895,7 +3901,6 @@
                 maLicenceChecked,
                 maExpiryOverride,
                 stateTimestamps: {
-                    withdrawn: withdrawnTimestamp,
                     carNumbers: carNumberTimestamp,
                     customCarSlots: customCarSlotsTimestamp,
                     manualNavMatches: manualNavMatchesTimestamp,
@@ -3925,7 +3930,13 @@
                     photoIdVerified = data.photoIdVerified || {};
                     disclaimerChecked = data.disclaimerChecked || {};
                     disclaimerLocked = data.disclaimerLocked || {};
-                    withdrawn = new Set(Array.from(data.withdrawn || []).map(v => String(v)));
+                    withdrawnAt = data.withdrawnAt || {};
+                    restoredAt  = data.restoredAt  || {};
+                    // Backward compat: old localStorage had only a withdrawn array → seed withdrawnAt
+                    if (!data.withdrawnAt && Array.isArray(data.withdrawn) && data.withdrawn.length > 0) {
+                        data.withdrawn.forEach(id => { withdrawnAt[String(id)] = 1; });
+                    }
+                    recomputeWithdrawn();
                     carNumberAssignments = data.carNumberAssignments || {};
                     customCarSlots = data.customCarSlots || [];
                     manualNavMatches = data.manualNavMatches || [];
@@ -3933,7 +3944,6 @@
                     maLicenceChecked = data.maLicenceChecked || {};
                     maExpiryOverride = data.maExpiryOverride || {};
                     const _ts = data.stateTimestamps || {};
-                    withdrawnTimestamp = _ts.withdrawn || 0;
                     carNumberTimestamp = _ts.carNumbers || 0;
                     customCarSlotsTimestamp = _ts.customCarSlots || 0;
                     manualNavMatchesTimestamp = _ts.manualNavMatches || 0;
@@ -4246,7 +4256,13 @@
                 photoIdVerified      = _ot(remoteState.photoIdVerified);
                 disclaimerChecked    = _ot(remoteState.disclaimerChecked);
                 disclaimerLocked     = _ot(remoteState.disclaimerLocked);
-                withdrawn            = new Set(Array.isArray(remoteState.withdrawn) ? remoteState.withdrawn.map(String) : []);
+                withdrawnAt          = remoteState.withdrawnAt || {};
+                restoredAt           = remoteState.restoredAt  || {};
+                // Backward compat: old Dropbox state has only withdrawn array, no withdrawnAt
+                if (!remoteState.withdrawnAt && Array.isArray(remoteState.withdrawn)) {
+                    remoteState.withdrawn.forEach(id => { withdrawnAt[String(id)] = 1; });
+                }
+                recomputeWithdrawn();
                 navigationMarryEntries = Array.isArray(remoteState.navigationMarryEntries) ? remoteState.navigationMarryEntries : [];
                 carNumberAssignments = remoteState.carNumberAssignments || {};
                 customCarSlots       = Array.isArray(remoteState.customCarSlots) ? remoteState.customCarSlots : [];
@@ -4256,7 +4272,6 @@
                 maExpiryOverride     = remoteState.maExpiryOverride || {};
                 // Restore timestamps from remote state
                 const _fts = remoteState.stateTimestamps || {};
-                withdrawnTimestamp        = _fts.withdrawn        || 0;
                 carNumberTimestamp        = _fts.carNumbers       || 0;
                 customCarSlotsTimestamp   = _fts.customCarSlots   || 0;
                 manualNavMatchesTimestamp = _fts.manualNavMatches || 0;
@@ -4265,11 +4280,11 @@
                 const _merged = {
                     csvData, csvHeaders, csvUploadTimestamp, docVerified, photoIdVerified,
                     disclaimerChecked, disclaimerLocked,
-                    withdrawn: Array.from(withdrawn), navigationMarryEntries,
+                    withdrawn: Array.from(withdrawn), withdrawnAt, restoredAt,
+                    navigationMarryEntries,
                     carNumberAssignments, customCarSlots, manualNavMatches,
                     maLicenceVerification, maLicenceChecked, maExpiryOverride,
                     stateTimestamps: {
-                        withdrawn: withdrawnTimestamp,
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
                         manualNavMatches: manualNavMatchesTimestamp,
@@ -4372,7 +4387,9 @@
                     photoIdVerified: _t(photoIdVerified),
                     disclaimerChecked: _t(disclaimerChecked),
                     disclaimerLocked: _t(disclaimerLocked),
-                    withdrawn: Array.from(withdrawn),
+                    withdrawn: Array.from(withdrawn), // computed — for backward compat
+                    withdrawnAt: withdrawnAt,
+                    restoredAt: restoredAt,
                     navigationMarryEntries: navigationMarryEntries,
                     carNumberAssignments: carNumberAssignments,
                     customCarSlots: customCarSlots,
@@ -4381,7 +4398,6 @@
                     maLicenceChecked: maLicenceChecked, // keep false values so unticks propagate via Dropbox
                     maExpiryOverride: maExpiryOverride,
                     stateTimestamps: {
-                        withdrawn: withdrawnTimestamp,
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
                         manualNavMatches: manualNavMatchesTimestamp,
@@ -4565,31 +4581,37 @@
                         }
                     }
 
-                    // Merge withdrawn set: last-writer-wins (by stateTimestamps.withdrawn).
-                    // Restorations (withdrawn.delete) MUST propagate — union-only would re-add them.
-                    // Fall back to union merge when neither side has a timestamp (old Dropbox state).
-                    if (remoteState.withdrawn && Array.isArray(remoteState.withdrawn)) {
-                        const remoteTs = (remoteState.stateTimestamps && remoteState.stateTimestamps.withdrawn) || 0;
-                        const localTs  = withdrawnTimestamp || 0;
-                        if (remoteTs > localTs) {
-                            // Remote is newer — take remote's withdrawn set entirely (handles restorations)
-                            withdrawn = new Set(remoteState.withdrawn.map(String));
-                            withdrawnTimestamp = remoteTs;
+                    // Merge withdrawn/restored: per-entry union-max timestamp.
+                    // Each entry's withdrawal/restoration timestamp is tracked independently —
+                    // User A's 7 withdrawals and User B's 1 withdrawal converge correctly
+                    // regardless of who syncs last (no global "last writer overwrites all" bug).
+                    {
+                        const maxMerge = (local, remote) => {
+                            const out = Object.assign({}, local);
+                            Object.entries(remote || {}).forEach(([id, ts]) => {
+                                if (!(id in out) || ts > out[id]) out[id] = ts;
+                            });
+                            return out;
+                        };
+                        // Backward compat: old Dropbox state has only withdrawn array, no withdrawnAt
+                        const remoteWA = remoteState.withdrawnAt ||
+                            (Array.isArray(remoteState.withdrawn)
+                                ? Object.fromEntries(remoteState.withdrawn.map(id => [String(id), 1]))
+                                : {});
+                        const newWA = maxMerge(withdrawnAt, remoteWA);
+                        const newRA = maxMerge(restoredAt, remoteState.restoredAt || {});
+                        if (JSON.stringify(newWA) !== JSON.stringify(withdrawnAt) ||
+                            JSON.stringify(newRA) !== JSON.stringify(restoredAt)) {
+                            withdrawnAt = newWA;
+                            restoredAt  = newRA;
+                            recomputeWithdrawn();
                             stateUpdated = true;
-                        } else if (localTs > remoteTs) {
-                            // Local is newer — push-back needed
+                        }
+                        // Push back if local has entries remote is missing, or remote is still old format
+                        if (!remoteState.withdrawnAt ||
+                            Object.keys(withdrawnAt).some(id => !(id in (remoteState.withdrawnAt || {}))) ||
+                            Object.keys(restoredAt).some(id => !(id in (remoteState.restoredAt || {})))) {
                             localAhead = true;
-                        } else {
-                            // No timestamps on either side (old state) — fall back to union merge
-                            const remoteWithdrawn = new Set(remoteState.withdrawn.map(String));
-                            for (const id of withdrawn) {
-                                if (!remoteWithdrawn.has(id)) { localAhead = true; break; }
-                            }
-                            const merged = new Set([...withdrawn, ...remoteWithdrawn]);
-                            if (merged.size !== withdrawn.size) {
-                                withdrawn = merged;
-                                stateUpdated = true;
-                            }
                         }
                     }
 
@@ -4764,12 +4786,11 @@
                         const _merged = {
                             csvData, csvHeaders, csvUploadTimestamp, docVerified, photoIdVerified,
                             disclaimerChecked, disclaimerLocked,
-                            withdrawn: Array.from(withdrawn),
+                            withdrawn: Array.from(withdrawn), withdrawnAt, restoredAt,
                             navigationMarryEntries, carNumberAssignments,
                             customCarSlots, manualNavMatches,
                             maLicenceVerification, maLicenceChecked, maExpiryOverride,
                             stateTimestamps: {
-                                withdrawn: withdrawnTimestamp,
                                 carNumbers: carNumberTimestamp,
                                 customCarSlots: customCarSlotsTimestamp,
                                 manualNavMatches: manualNavMatchesTimestamp,
@@ -5164,6 +5185,16 @@
             }
             dupDiv.innerHTML = dupHtml;
         }
+        // Rebuild the withdrawn Set from withdrawnAt and restoredAt timestamp maps.
+        // An entry is currently withdrawn if its last withdrawal timestamp > its last restoration timestamp.
+        // Call this after any mutation to either map.
+        function recomputeWithdrawn() {
+            withdrawn = new Set();
+            const allIds = new Set([...Object.keys(withdrawnAt), ...Object.keys(restoredAt)]);
+            allIds.forEach(function(id) {
+                if ((withdrawnAt[id] || 0) > (restoredAt[id] || 0)) withdrawn.add(id);
+            });
+        }
         function withdrawEntrant(idx, withdrawKey) {
             if (confirm(`Are you sure you want to withdraw this entrant?`)) {
                 const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
@@ -5171,8 +5202,8 @@
                 // withdrawKey is passed from the render loop (entryId or _row_N fallback).
                 // Recompute here if not supplied (e.g. called from elsewhere).
                 if (!withdrawKey) withdrawKey = entryId || `_row_${idx}`;
-                withdrawn.add(withdrawKey);
-                withdrawnTimestamp = Date.now();
+                withdrawnAt[withdrawKey] = Date.now();
+                recomputeWithdrawn();
                 saveToStorage();
                 renderWithdrawalTab();
                 renderDocTable();
@@ -5187,8 +5218,8 @@
         }
         function restoreEntrant(entryId) {
             if (confirm(`Are you sure you want to restore this entrant?`)) {
-                withdrawn.delete(entryId);
-                withdrawnTimestamp = Date.now();
+                restoredAt[entryId] = Date.now();
+                recomputeWithdrawn();
                 saveToStorage();
                 renderWithdrawalTab();
                 // Update all other views to reflect the restoration
