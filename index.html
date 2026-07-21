@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.64 - Version badge in header; fix MA licence checkbox auto re-tick: store false explicitly, push immediately on change, remote-wins-per-entry merge 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.65 - Green sync status only shows on genuine Dropbox success: track failure count, staleness check, fix silent error paths 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.64';
+        const DASHBOARD_VERSION = 'v3.65';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -3990,6 +3990,7 @@
         let dropboxSyncTimer = null;
         let dropboxDbx = null;
         let lastSyncTimestamp = 0;
+        let syncFailureCount = 0; // consecutive pull failures — used to show stale/error status
         const DROPBOX_SYNC_INTERVAL = 5000; // Auto-sync every 5 seconds
         const DROPBOX_STATE_FILE = '/Massive Events Corp Folders/Adelaide Rally 2026/03. Dashboard/AdelaideRallyState.json';
 
@@ -4146,25 +4147,40 @@
                     if (hdr && disconnectBanner) hdr.style.top = disconnectBanner.offsetHeight + 'px';
                 }, 50);
             } else if (token) {
-                // Token present — show connected with last sync time
+                // Token present — verify sync is actually recent before showing green
                 authBtn.style.display = 'none';
                 if (forceSyncBtn) forceSyncBtn.style.display = 'inline-block';
-                statusDiv.classList.remove('sync-error');
-                statusDiv.classList.add('connected');
-                if (lastSyncTimestamp) {
+                const staleThreshold = DROPBOX_SYNC_INTERVAL * 6; // 30s: if 6+ auto-sync cycles missed, something is wrong
+                const isStale = lastSyncTimestamp && (Date.now() - lastSyncTimestamp) > staleThreshold;
+                if (isStale) {
+                    // Last sync was too long ago — auto-sync has probably stalled
+                    statusDiv.classList.remove('connected');
+                    statusDiv.classList.add('sync-error');
                     const d = new Date(lastSyncTimestamp);
                     const hh = String(d.getHours()).padStart(2, '0');
                     const mm = String(d.getMinutes()).padStart(2, '0');
                     const ss = String(d.getSeconds()).padStart(2, '0');
-                    statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss;
+                    statusDiv.textContent = '⚠ Stale (last ' + hh + ':' + mm + ':' + ss + ')';
+                    statusDiv.style.display = 'inline-block';
+                    if (disconnectBanner) disconnectBanner.style.display = 'flex';
                 } else {
-                    statusDiv.textContent = '✓ Connected';
+                    statusDiv.classList.remove('sync-error');
+                    statusDiv.classList.add('connected');
+                    if (lastSyncTimestamp) {
+                        const d = new Date(lastSyncTimestamp);
+                        const hh = String(d.getHours()).padStart(2, '0');
+                        const mm = String(d.getMinutes()).padStart(2, '0');
+                        const ss = String(d.getSeconds()).padStart(2, '0');
+                        statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss;
+                    } else {
+                        statusDiv.textContent = '⏳ Connecting…';
+                    }
+                    statusDiv.style.display = 'inline-block';
+                    // Hide disconnect banner (if it was showing from a previous error)
+                    if (disconnectBanner) disconnectBanner.style.display = 'none';
+                    const hdr = document.querySelector('.hdr');
+                    if (hdr) hdr.style.top = '';
                 }
-                statusDiv.style.display = 'inline-block';
-                // Hide disconnect banner (if it was showing from a previous error)
-                if (disconnectBanner) disconnectBanner.style.display = 'none';
-                const hdr = document.querySelector('.hdr');
-                if (hdr) hdr.style.top = '';
             } else {
                 // No token — show reconnect button and disconnect banner
                 authBtn.style.display = 'inline-block';
@@ -4402,12 +4418,20 @@
                         if (refreshed) { await syncFromDropbox(); } else { updateDropboxStatus('Session expired — reconnect'); }
                         return;
                     } else if (linkResponse.status === 409) {
+                        // File doesn't exist yet — first sync, nothing to merge. This is OK.
                         console.log('ℹ Dropbox state file not found (first sync)');
-                        lastSyncTimestamp = Date.now(); updateDropboxStatus(); return;
+                        syncFailureCount = 0; // not a failure — just empty
+                        lastSyncTimestamp = Date.now();
+                        updateDropboxStatus();
+                        return false;
                     } else {
                         const errorText = await linkResponse.text();
                         console.warn('⚠ Failed to get Dropbox download link:', linkResponse.status, errorText);
-                        return; // Don't disable sync — uploads can still succeed
+                        syncFailureCount++;
+                        if (syncFailureCount >= 2) {
+                            updateDropboxStatus('Sync failed (' + linkResponse.status + ') — check connection');
+                        }
+                        return false;
                     }
                 }
                 const linkData = await linkResponse.json();
@@ -4647,6 +4671,7 @@
                         };
                         localStorage.setItem('adelaideRallyData', JSON.stringify(_merged));
                     }
+                    syncFailureCount = 0; // successful pull — clear any previous failure count
                     lastSyncTimestamp = Date.now();
                     updateDropboxStatus();
                     if (hasChanges || stateUpdated) {
@@ -4663,13 +4688,21 @@
                     }
                     return localAhead;
                 } else {
-                    // CDN link returned non-ok — log but don't disable sync; uploads still work
+                    // CDN link returned non-ok — log and count as failure
                     console.warn('⚠ Dropbox CDN download returned:', response.status);
+                    syncFailureCount++;
+                    if (syncFailureCount >= 2) {
+                        updateDropboxStatus('Sync failed (' + response.status + ') — check connection');
+                    }
                     return false;
                 }
             } catch (error) {
-                // Transient errors (CORS, network) — don't disable sync; uploads can still succeed
+                // Transient errors (CORS, network) — count failure but don't immediately error
                 console.warn('⚠ Error syncing from Dropbox:', error.message);
+                syncFailureCount++;
+                if (syncFailureCount >= 2) {
+                    updateDropboxStatus('Sync stalled — check connection');
+                }
                 return false;
             }
         }
