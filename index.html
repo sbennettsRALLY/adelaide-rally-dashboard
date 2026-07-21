@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.67 - Fix ghost entries: local-wins sync path also must not append Dropbox rows 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.68 - Fix sync: all manual fields now set localAhead when local has state Dropbox doesn't 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.67';
+        const DASHBOARD_VERSION = 'v3.68';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4527,7 +4527,11 @@
 
                     // Merge withdrawn set: combine all withdrawn entry IDs from both local and remote
                     if (remoteState.withdrawn && Array.isArray(remoteState.withdrawn)) {
-                        const remoteWithdrawn = new Set(remoteState.withdrawn);
+                        const remoteWithdrawn = new Set(remoteState.withdrawn.map(String));
+                        // If local has any entries Dropbox doesn't, push-back is needed
+                        for (const id of withdrawn) {
+                            if (!remoteWithdrawn.has(id)) { localAhead = true; break; }
+                        }
                         const merged = new Set([...withdrawn, ...remoteWithdrawn]);
                         if (merged.size !== withdrawn.size) {
                             withdrawn = merged;
@@ -4538,6 +4542,11 @@
                     // Merge navigation marry entries - combine both arrays
                     if (remoteState.navigationMarryEntries) {
                         const localMarrySet = new Set(navigationMarryEntries.map(e => JSON.stringify(e)));
+                        const remoteMarrySet = new Set((remoteState.navigationMarryEntries || []).map(e => JSON.stringify(e)));
+                        // If local has entries Dropbox doesn't, push-back is needed
+                        for (const s of localMarrySet) {
+                            if (!remoteMarrySet.has(s)) { localAhead = true; break; }
+                        }
                         let marryUpdated = false;
                         remoteState.navigationMarryEntries.forEach(remoteEntry => {
                             const entryStr = JSON.stringify(remoteEntry);
@@ -4551,6 +4560,10 @@
 
                     // Merge carNumberAssignments: remote values fill any locally unassigned slots
                     if (remoteState.carNumberAssignments && typeof remoteState.carNumberAssignments === 'object') {
+                        // If local has assignments Dropbox doesn't, push-back is needed
+                        if (Object.keys(carNumberAssignments).some(k => carNumberAssignments[k] && !remoteState.carNumberAssignments[k])) {
+                            localAhead = true;
+                        }
                         Object.entries(remoteState.carNumberAssignments).forEach(([carNum, assignment]) => {
                             if (assignment && !carNumberAssignments[carNum]) {
                                 carNumberAssignments[carNum] = assignment;
@@ -4580,6 +4593,11 @@
                     // Merge customCarSlots: add any remote custom slots not already in local list
                     if (Array.isArray(remoteState.customCarSlots)) {
                         const localCarNums = new Set(customCarSlots.map(s => s.carNum));
+                        const remoteCarNums = new Set(remoteState.customCarSlots.map(s => s && s.carNum).filter(Boolean));
+                        // If local has slots Dropbox doesn't, push-back is needed
+                        for (const num of localCarNums) {
+                            if (!remoteCarNums.has(num)) { localAhead = true; break; }
+                        }
                         remoteState.customCarSlots.forEach(slot => {
                             if (slot && slot.carNum && !localCarNums.has(slot.carNum)) {
                                 customCarSlots.push(slot);
@@ -4591,6 +4609,11 @@
                     // Merge manualNavMatches: add any remote matches not already in local list
                     if (Array.isArray(remoteState.manualNavMatches)) {
                         const localMatchKeys = new Set(manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
+                        const remoteMatchKeys = new Set(remoteState.manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
+                        // If local has matches Dropbox doesn't, push-back is needed
+                        for (const k of localMatchKeys) {
+                            if (!remoteMatchKeys.has(k)) { localAhead = true; break; }
+                        }
                         remoteState.manualNavMatches.forEach(match => {
                             const key = match.driverEntryId + '|' + match.navigatorEntryId;
                             if (!localMatchKeys.has(key)) {
@@ -4632,6 +4655,10 @@
 
                     // Merge maExpiryOverride: union, local wins on conflict
                     if (remoteState.maExpiryOverride && typeof remoteState.maExpiryOverride === 'object') {
+                        // If local has entries Dropbox doesn't, push-back is needed
+                        if (Object.keys(maExpiryOverride).some(k => !(k in remoteState.maExpiryOverride))) {
+                            localAhead = true;
+                        }
                         const merged = { ...remoteState.maExpiryOverride, ...maExpiryOverride };
                         if (JSON.stringify(merged) !== JSON.stringify(maExpiryOverride)) {
                             maExpiryOverride = merged;
