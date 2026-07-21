@@ -4185,8 +4185,8 @@
                     const hh = String(d.getHours()).padStart(2, '0');
                     const mm = String(d.getMinutes()).padStart(2, '0');
                     const ss = String(d.getSeconds()).padStart(2, '0');
-                    const staleEntries = csvData.length > 0 ? ' · ' + (csvData.length - withdrawn.size) + ' entries' : '';
-                    statusDiv.textContent = '⚠ Stale (last ' + hh + ':' + mm + ':' + ss + ')' + staleEntries;
+                    const staleRows = csvData.length > 0 ? ' · ' + csvData.length + ' rows' : '';
+                    statusDiv.textContent = '⚠ Stale (last ' + hh + ':' + mm + ':' + ss + ')' + staleRows;
                     statusDiv.style.display = 'inline-block';
                     if (disconnectBanner) disconnectBanner.style.display = 'flex';
                 } else {
@@ -4197,13 +4197,12 @@
                         const hh = String(d.getHours()).padStart(2, '0');
                         const mm = String(d.getMinutes()).padStart(2, '0');
                         const ss = String(d.getSeconds()).padStart(2, '0');
-                        // Show active entry count so users can instantly spot data divergence
-                        // between sessions — if two users see different counts, something is wrong.
-                        const activeEntries = csvData.length > 0
-                            ? (csvData.length - withdrawn.size) + ' entries'
-                            : '';
-                        statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss
-                            + (activeEntries ? ' · ' + activeEntries : '');
+                        // Show total CSV row count so users can instantly spot data divergence
+                        // between sessions — if two users see different numbers, their CSV differs.
+                        // (Using csvData.length not active count — withdrawn.size can include phantom
+                        // IDs from old CSV uploads which would give a misleadingly low active number.)
+                        const rowCount = csvData.length > 0 ? ' · ' + csvData.length + ' rows' : '';
+                        statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss + rowCount;
                     } else {
                         statusDiv.textContent = '⏳ Connecting…';
                     }
