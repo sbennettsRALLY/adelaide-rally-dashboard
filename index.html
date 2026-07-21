@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.69 - Fix all deletion/restoration sync gaps: last-writer-wins timestamps for withdrawn, carNumbers, customCarSlots, manualNavMatches 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.70 - Fix MA licence sync: pull-then-push on tick/untick prevents overwriting concurrent changes 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.69';
+        const DASHBOARD_VERSION = 'v3.70';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -2133,10 +2133,13 @@
                     // Store explicit false (not delete) so Dropbox can propagate unticks to other users
                     maLicenceChecked[entryId] = e.target.checked ? true : false;
                     saveToStorage();
-                    // Push immediately (bypass debounce) so the untick reaches Dropbox before
-                    // the next auto-pull fires and re-ticks via stale remote state
+                    // Pull-then-push immediately so we merge other users' recent ticks before writing.
+                    // (A raw syncToDropbox() without a prior pull can overwrite concurrent ticks from
+                    // other users — pull-then-push is safe even if slightly slower.)
                     if (dropboxSyncEnabled) {
-                        syncToDropbox().catch(err => console.warn('⚠ MA licence push failed:', err));
+                        syncFromDropbox()
+                            .then(() => syncToDropbox())
+                            .catch(err => console.warn('⚠ MA licence push failed:', err));
                     }
                     updateDocStats();
                     updateRowStyling(idx);
