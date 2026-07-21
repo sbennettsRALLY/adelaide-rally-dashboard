@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.71 - Fix withdrawn sync: per-entry withdrawnAt/restoredAt timestamps replace global last-writer-wins 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.71 - Fix withdrawn sync + show entry count in sync badge for data-divergence visibility 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -4185,7 +4185,8 @@
                     const hh = String(d.getHours()).padStart(2, '0');
                     const mm = String(d.getMinutes()).padStart(2, '0');
                     const ss = String(d.getSeconds()).padStart(2, '0');
-                    statusDiv.textContent = '⚠ Stale (last ' + hh + ':' + mm + ':' + ss + ')';
+                    const staleEntries = csvData.length > 0 ? ' · ' + (csvData.length - withdrawn.size) + ' entries' : '';
+                    statusDiv.textContent = '⚠ Stale (last ' + hh + ':' + mm + ':' + ss + ')' + staleEntries;
                     statusDiv.style.display = 'inline-block';
                     if (disconnectBanner) disconnectBanner.style.display = 'flex';
                 } else {
@@ -4196,7 +4197,13 @@
                         const hh = String(d.getHours()).padStart(2, '0');
                         const mm = String(d.getMinutes()).padStart(2, '0');
                         const ss = String(d.getSeconds()).padStart(2, '0');
-                        statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss;
+                        // Show active entry count so users can instantly spot data divergence
+                        // between sessions — if two users see different counts, something is wrong.
+                        const activeEntries = csvData.length > 0
+                            ? (csvData.length - withdrawn.size) + ' entries'
+                            : '';
+                        statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss
+                            + (activeEntries ? ' · ' + activeEntries : '');
                     } else {
                         statusDiv.textContent = '⏳ Connecting…';
                     }
