@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.68 - Fix sync: all manual fields now set localAhead when local has state Dropbox doesn't 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.69 - Fix all deletion/restoration sync gaps: last-writer-wins timestamps for withdrawn, carNumbers, customCarSlots, manualNavMatches 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.68';
+        const DASHBOARD_VERSION = 'v3.69';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1170,12 +1170,18 @@
         let maLicenceVerification = {}; // {[licNum]: {section, name, licences, best}} — from MA Verification Report PDF
         let maLicenceChecked = {};      // {[entryId]: true/false} — manual or auto MA Licence checkbox on dashboard
         let maExpiryOverride = {};      // {[entryId]: 'dd/mm/yyyy'} — manually entered expiry dates on MA Checks tab
-        let navigationMarryEntries = []; // Track navigator/driver pairings for "Nav Marry" tab
+        let navigationMarryEntries = []; // Legacy field — kept for Dropbox backward compat but not used by UI
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
         let manualNavMatches = []; // [{driverEntryId, navigatorEntryId}] — manually confirmed nav pairs
+        // Per-field timestamps — used for last-writer-wins merge on fields where DELETION must propagate.
+        // Without these, union-only merge means removals (restore, unassign, unmatch, remove slot) never sync.
+        let withdrawnTimestamp = 0;
+        let carNumberTimestamp = 0;
+        let customCarSlotsTimestamp = 0;
+        let manualNavMatchesTimestamp = 0;
         let csvUploadTimestamp = 0; // Unix ms — when the CSV was last uploaded via the file picker
         let currentView = 'dashboard';
         let filterMissing = null; // 'photoId', 'disclaimer', or null
@@ -3505,6 +3511,7 @@
             const already = manualNavMatches.some(m => m.driverEntryId === driverEntryId && m.navigatorEntryId === navigatorEntryId);
             if (already) return;
             manualNavMatches.push({ driverEntryId, navigatorEntryId });
+            manualNavMatchesTimestamp = Date.now();
             saveToStorage();
             renderNavMarryTable();
             showMessage('navMsg', 'success', `✓ Pair matched manually — they have been moved to the Confirmed Pairs table below.`);
@@ -3512,6 +3519,7 @@
 
         function navManualUnmatch(driverEntryId, navigatorEntryId) {
             manualNavMatches = manualNavMatches.filter(m => !(m.driverEntryId === driverEntryId && m.navigatorEntryId === navigatorEntryId));
+            manualNavMatchesTimestamp = Date.now();
             saveToStorage();
             renderNavMarryTable();
             showMessage('navMsg', 'info', `Pairing removed — they have been returned to the unmatched list.`);
@@ -3883,6 +3891,12 @@
                 maLicenceVerification,
                 maLicenceChecked,
                 maExpiryOverride,
+                stateTimestamps: {
+                    withdrawn: withdrawnTimestamp,
+                    carNumbers: carNumberTimestamp,
+                    customCarSlots: customCarSlotsTimestamp,
+                    manualNavMatches: manualNavMatchesTimestamp,
+                },
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('adelaideRallyData', JSON.stringify(data));
@@ -3915,6 +3929,11 @@
                     maLicenceVerification = data.maLicenceVerification || {};
                     maLicenceChecked = data.maLicenceChecked || {};
                     maExpiryOverride = data.maExpiryOverride || {};
+                    const _ts = data.stateTimestamps || {};
+                    withdrawnTimestamp = _ts.withdrawn || 0;
+                    carNumberTimestamp = _ts.carNumbers || 0;
+                    customCarSlotsTimestamp = _ts.customCarSlots || 0;
+                    manualNavMatchesTimestamp = _ts.manualNavMatches || 0;
                     // Set lastSyncTimestamp to now so local state takes priority over Dropbox state
                     lastSyncTimestamp = Date.now();
                     if (csvData.length > 0) {
@@ -4232,6 +4251,12 @@
                 maLicenceVerification = remoteState.maLicenceVerification || {};
                 maLicenceChecked     = remoteState.maLicenceChecked || {}; // preserve false values (unticks)
                 maExpiryOverride     = remoteState.maExpiryOverride || {};
+                // Restore timestamps from remote state
+                const _fts = remoteState.stateTimestamps || {};
+                withdrawnTimestamp        = _fts.withdrawn        || 0;
+                carNumberTimestamp        = _fts.carNumbers       || 0;
+                customCarSlotsTimestamp   = _fts.customCarSlots   || 0;
+                manualNavMatchesTimestamp = _fts.manualNavMatches || 0;
 
                 // Persist hard-replaced state to localStorage
                 const _merged = {
@@ -4240,6 +4265,12 @@
                     withdrawn: Array.from(withdrawn), navigationMarryEntries,
                     carNumberAssignments, customCarSlots, manualNavMatches,
                     maLicenceVerification, maLicenceChecked, maExpiryOverride,
+                    stateTimestamps: {
+                        withdrawn: withdrawnTimestamp,
+                        carNumbers: carNumberTimestamp,
+                        customCarSlots: customCarSlotsTimestamp,
+                        manualNavMatches: manualNavMatchesTimestamp,
+                    },
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]')
                 };
                 localStorage.setItem('adelaideRallyData', JSON.stringify(_merged));
@@ -4346,6 +4377,12 @@
                     maLicenceVerification: maLicenceVerification,
                     maLicenceChecked: maLicenceChecked, // keep false values so unticks propagate via Dropbox
                     maExpiryOverride: maExpiryOverride,
+                    stateTimestamps: {
+                        withdrawn: withdrawnTimestamp,
+                        carNumbers: carNumberTimestamp,
+                        customCarSlots: customCarSlotsTimestamp,
+                        manualNavMatches: manualNavMatchesTimestamp,
+                    },
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
                 };
@@ -4525,17 +4562,31 @@
                         }
                     }
 
-                    // Merge withdrawn set: combine all withdrawn entry IDs from both local and remote
+                    // Merge withdrawn set: last-writer-wins (by stateTimestamps.withdrawn).
+                    // Restorations (withdrawn.delete) MUST propagate — union-only would re-add them.
+                    // Fall back to union merge when neither side has a timestamp (old Dropbox state).
                     if (remoteState.withdrawn && Array.isArray(remoteState.withdrawn)) {
-                        const remoteWithdrawn = new Set(remoteState.withdrawn.map(String));
-                        // If local has any entries Dropbox doesn't, push-back is needed
-                        for (const id of withdrawn) {
-                            if (!remoteWithdrawn.has(id)) { localAhead = true; break; }
-                        }
-                        const merged = new Set([...withdrawn, ...remoteWithdrawn]);
-                        if (merged.size !== withdrawn.size) {
-                            withdrawn = merged;
+                        const remoteTs = (remoteState.stateTimestamps && remoteState.stateTimestamps.withdrawn) || 0;
+                        const localTs  = withdrawnTimestamp || 0;
+                        if (remoteTs > localTs) {
+                            // Remote is newer — take remote's withdrawn set entirely (handles restorations)
+                            withdrawn = new Set(remoteState.withdrawn.map(String));
+                            withdrawnTimestamp = remoteTs;
                             stateUpdated = true;
+                        } else if (localTs > remoteTs) {
+                            // Local is newer — push-back needed
+                            localAhead = true;
+                        } else {
+                            // No timestamps on either side (old state) — fall back to union merge
+                            const remoteWithdrawn = new Set(remoteState.withdrawn.map(String));
+                            for (const id of withdrawn) {
+                                if (!remoteWithdrawn.has(id)) { localAhead = true; break; }
+                            }
+                            const merged = new Set([...withdrawn, ...remoteWithdrawn]);
+                            if (merged.size !== withdrawn.size) {
+                                withdrawn = merged;
+                                stateUpdated = true;
+                            }
                         }
                     }
 
@@ -4558,18 +4609,29 @@
                         stateUpdated = stateUpdated || marryUpdated;
                     }
 
-                    // Merge carNumberAssignments: remote values fill any locally unassigned slots
+                    // Merge carNumberAssignments: last-writer-wins so reassignments and unassignments propagate.
+                    // Fall back to fill-empty-slots when no timestamps (old Dropbox state).
                     if (remoteState.carNumberAssignments && typeof remoteState.carNumberAssignments === 'object') {
-                        // If local has assignments Dropbox doesn't, push-back is needed
-                        if (Object.keys(carNumberAssignments).some(k => carNumberAssignments[k] && !remoteState.carNumberAssignments[k])) {
+                        const remoteTs = (remoteState.stateTimestamps && remoteState.stateTimestamps.carNumbers) || 0;
+                        const localTs  = carNumberTimestamp || 0;
+                        if (remoteTs > localTs) {
+                            carNumberAssignments = remoteState.carNumberAssignments;
+                            carNumberTimestamp = remoteTs;
+                            stateUpdated = true;
+                        } else if (localTs > remoteTs) {
                             localAhead = true;
-                        }
-                        Object.entries(remoteState.carNumberAssignments).forEach(([carNum, assignment]) => {
-                            if (assignment && !carNumberAssignments[carNum]) {
-                                carNumberAssignments[carNum] = assignment;
-                                stateUpdated = true;
+                        } else {
+                            // No timestamps — fill empty local slots with remote assignments (old behaviour)
+                            if (Object.keys(carNumberAssignments).some(k => carNumberAssignments[k] && !remoteState.carNumberAssignments[k])) {
+                                localAhead = true;
                             }
-                        });
+                            Object.entries(remoteState.carNumberAssignments).forEach(([carNum, assignment]) => {
+                                if (assignment && !carNumberAssignments[carNum]) {
+                                    carNumberAssignments[carNum] = assignment;
+                                    stateUpdated = true;
+                                }
+                            });
+                        }
                     }
 
                     // v3.16: Slot integrity enforcement — if the local v3.15 migration has run (921-929
@@ -4590,37 +4652,59 @@
                         }
                     }
 
-                    // Merge customCarSlots: add any remote custom slots not already in local list
+                    // Merge customCarSlots: last-writer-wins so slot removals propagate.
+                    // Fall back to union-add when no timestamps (old Dropbox state).
                     if (Array.isArray(remoteState.customCarSlots)) {
-                        const localCarNums = new Set(customCarSlots.map(s => s.carNum));
-                        const remoteCarNums = new Set(remoteState.customCarSlots.map(s => s && s.carNum).filter(Boolean));
-                        // If local has slots Dropbox doesn't, push-back is needed
-                        for (const num of localCarNums) {
-                            if (!remoteCarNums.has(num)) { localAhead = true; break; }
-                        }
-                        remoteState.customCarSlots.forEach(slot => {
-                            if (slot && slot.carNum && !localCarNums.has(slot.carNum)) {
-                                customCarSlots.push(slot);
-                                stateUpdated = true;
+                        const remoteTs = (remoteState.stateTimestamps && remoteState.stateTimestamps.customCarSlots) || 0;
+                        const localTs  = customCarSlotsTimestamp || 0;
+                        if (remoteTs > localTs) {
+                            customCarSlots = remoteState.customCarSlots;
+                            customCarSlotsTimestamp = remoteTs;
+                            stateUpdated = true;
+                        } else if (localTs > remoteTs) {
+                            localAhead = true;
+                        } else {
+                            // No timestamps — union-add (old behaviour)
+                            const localCarNums = new Set(customCarSlots.map(s => s.carNum));
+                            const remoteCarNums = new Set(remoteState.customCarSlots.map(s => s && s.carNum).filter(Boolean));
+                            for (const num of localCarNums) {
+                                if (!remoteCarNums.has(num)) { localAhead = true; break; }
                             }
-                        });
+                            remoteState.customCarSlots.forEach(slot => {
+                                if (slot && slot.carNum && !localCarNums.has(slot.carNum)) {
+                                    customCarSlots.push(slot);
+                                    stateUpdated = true;
+                                }
+                            });
+                        }
                     }
 
-                    // Merge manualNavMatches: add any remote matches not already in local list
+                    // Merge manualNavMatches: last-writer-wins so unmatches propagate.
+                    // Fall back to union-add when no timestamps (old Dropbox state).
                     if (Array.isArray(remoteState.manualNavMatches)) {
-                        const localMatchKeys = new Set(manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
-                        const remoteMatchKeys = new Set(remoteState.manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
-                        // If local has matches Dropbox doesn't, push-back is needed
-                        for (const k of localMatchKeys) {
-                            if (!remoteMatchKeys.has(k)) { localAhead = true; break; }
-                        }
-                        remoteState.manualNavMatches.forEach(match => {
-                            const key = match.driverEntryId + '|' + match.navigatorEntryId;
-                            if (!localMatchKeys.has(key)) {
-                                manualNavMatches.push(match);
-                                stateUpdated = true;
+                        const remoteTs = (remoteState.stateTimestamps && remoteState.stateTimestamps.manualNavMatches) || 0;
+                        const localTs  = manualNavMatchesTimestamp || 0;
+                        if (remoteTs > localTs) {
+                            manualNavMatches = remoteState.manualNavMatches;
+                            manualNavMatchesTimestamp = remoteTs;
+                            stateUpdated = true;
+                        } else if (localTs > remoteTs) {
+                            localAhead = true;
+                        } else {
+                            // No timestamps — union-add (old behaviour)
+                            const localMatchKeys = new Set(manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
+                            const remoteMatchKeys = new Set(remoteState.manualNavMatches.map(m => m.driverEntryId + '|' + m.navigatorEntryId));
+                            for (const k of localMatchKeys) {
+                                if (!remoteMatchKeys.has(k)) { localAhead = true; break; }
                             }
-                        });
+                            remoteState.manualNavMatches.forEach(match => {
+                                const key = match.driverEntryId + '|' + match.navigatorEntryId;
+                                if (!localMatchKeys.has(key)) {
+                                    manualNavMatches.push(match);
+                                    stateUpdated = true;
+                                }
+                            });
+                        }
                     }
 
                     // Merge maLicenceChecked: "remote wins per-entry" — NOT union-true.
@@ -4643,11 +4727,14 @@
                         }
                     }
 
-                    // Merge maLicenceVerification: remote wins if local is empty, otherwise keep local
+                    // Merge maLicenceVerification: remote wins if remote has more licence entries, local wins on conflict.
+                    // If local has more entries than remote, signal push-back.
                     if (remoteState.maLicenceVerification && typeof remoteState.maLicenceVerification === 'object') {
-                        const localKeys = Object.keys(maLicenceVerification).length;
-                        const remoteKeys = Object.keys(remoteState.maLicenceVerification).length;
-                        if (remoteKeys > localKeys) {
+                        const localCount = Object.keys(maLicenceVerification).length;
+                        const remoteCount = Object.keys(remoteState.maLicenceVerification).length;
+                        if (localCount > remoteCount) {
+                            localAhead = true; // local PDF has more data — push it to Dropbox
+                        } else if (remoteCount > localCount) {
                             maLicenceVerification = { ...remoteState.maLicenceVerification, ...maLicenceVerification };
                             stateUpdated = true;
                         }
@@ -4678,6 +4765,12 @@
                             navigationMarryEntries, carNumberAssignments,
                             customCarSlots, manualNavMatches,
                             maLicenceVerification, maLicenceChecked, maExpiryOverride,
+                            stateTimestamps: {
+                                withdrawn: withdrawnTimestamp,
+                                carNumbers: carNumberTimestamp,
+                                customCarSlots: customCarSlotsTimestamp,
+                                manualNavMatches: manualNavMatchesTimestamp,
+                            },
                             migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]')
                         };
                         localStorage.setItem('adelaideRallyData', JSON.stringify(_merged));
@@ -5076,6 +5169,7 @@
                 // Recompute here if not supplied (e.g. called from elsewhere).
                 if (!withdrawKey) withdrawKey = entryId || `_row_${idx}`;
                 withdrawn.add(withdrawKey);
+                withdrawnTimestamp = Date.now();
                 saveToStorage();
                 renderWithdrawalTab();
                 renderDocTable();
@@ -5091,6 +5185,7 @@
         function restoreEntrant(entryId) {
             if (confirm(`Are you sure you want to restore this entrant?`)) {
                 withdrawn.delete(entryId);
+                withdrawnTimestamp = Date.now();
                 saveToStorage();
                 renderWithdrawalTab();
                 // Update all other views to reflect the restoration
@@ -6402,6 +6497,7 @@
                 newCount++;
             });
 
+            if (newCount > 0) carNumberTimestamp = Date.now();
             saveToStorage();
             renderCarNumbers();
             showMessage('cnMsg', 'success', `✓ Auto-assigned ${newCount} driver${newCount !== 1 ? 's' : ''} to car numbers. TL/TF slots require manual assignment.`);
@@ -6428,6 +6524,7 @@
                 cnSwapSource = null;
                 document.getElementById('cnClearSwapBtn').style.display = 'none';
                 document.getElementById('cnSwapBanner').style.display = 'none';
+                carNumberTimestamp = Date.now();
                 saveToStorage();
                 renderCarNumbers();
                 showMessage('cnMsg', 'success', `✓ Swapped: Car #${asgA ? asgA.driverName : '(empty)'} ↔ Car #${asgB ? asgB.driverName : '(empty)'}`);
@@ -6444,6 +6541,7 @@
         function cnClearAll() {
             if (!confirm('Clear ALL car number assignments? This cannot be undone.')) return;
             carNumberAssignments = {};
+            carNumberTimestamp = Date.now();
             saveToStorage();
             renderCarNumbers();
             showMessage('cnMsg', 'info', 'All car number assignments cleared.');
@@ -6497,6 +6595,7 @@
             }
 
             customCarSlots.push({carNum, category, role, insertAfter: insertAfter || null});
+            customCarSlotsTimestamp = Date.now();
             saveToStorage();
             renderCarNumbers();
 
@@ -6510,6 +6609,8 @@
         function cnRemoveCustomSlot(carNum) {
             customCarSlots = customCarSlots.filter(cs => cs.carNum !== carNum);
             delete carNumberAssignments[carNum];
+            customCarSlotsTimestamp = Date.now();
+            carNumberTimestamp = Date.now();
             saveToStorage();
             renderCarNumbers();
         }
@@ -6526,6 +6627,7 @@
                 }
             });
             carNumberAssignments[carNum] = {entryId, driverName};
+            carNumberTimestamp = Date.now();
             saveToStorage();
             renderCarNumbers();
             showMessage('cnMsg', 'success', `✓ ${driverName} assigned to car #${carNum}`);
