@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.74 - Remove Force Push, add Reconnect button for connected state 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.75 - Fix maLicenceChecked localAhead bug: local true not pushing when remote had key as false 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1160,7 +1160,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.74';
+        const DASHBOARD_VERSION = 'v3.75';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4797,9 +4797,10 @@
                     // Rationale: a corrupt Dropbox push with false values must never overwrite a
                     // user's correct true — that's unrecoverable without coordinator intervention. A missed untick
                     // propagation is recoverable (coordinator can re-untick manually).
-                    if (remoteState.maLicenceChecked && typeof remoteState.maLicenceChecked === 'object') {
+                    {
+                        const remLC = remoteState.maLicenceChecked || {};
                         const merged = { ...maLicenceChecked }; // start with local
-                        Object.entries(remoteState.maLicenceChecked).forEach(([k, v]) => {
+                        Object.entries(remLC).forEach(([k, v]) => {
                             if (v === true) {
                                 merged[k] = true; // remote true always wins
                             } else if (!merged[k]) {
@@ -4807,8 +4808,11 @@
                             }
                             // remote false + local true → local true survives
                         });
-                        const remoteKeys = new Set(Object.keys(remoteState.maLicenceChecked));
-                        if (Object.keys(maLicenceChecked).some(k => !remoteKeys.has(k) && maLicenceChecked[k])) {
+                        // Local is ahead if any local true is not yet reflected as true in remote.
+                        // Checks both missing keys AND keys present-but-false in remote — the previous
+                        // bug only checked missing keys, so when remote had all keys as false (corrupt
+                        // push), local trues were never pushed back to Dropbox.
+                        if (Object.keys(maLicenceChecked).some(k => maLicenceChecked[k] === true && remLC[k] !== true)) {
                             localAhead = true;
                         }
                         if (JSON.stringify(merged) !== JSON.stringify(maLicenceChecked)) {
