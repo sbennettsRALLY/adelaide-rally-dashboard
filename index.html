@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.75 - Fix maLicenceChecked localAhead bug: local true not pushing when remote had key as false 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.76 - Fix updateDocStats entryId trim + skip empty IDs, fix maLicenceChecked localAhead bug 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1160,7 +1160,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.75';
+        const DASHBOARD_VERSION = 'v3.76';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -2395,8 +2395,8 @@
             const paymentAmountIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('payment ammount') || h.toLowerCase().includes('payment amount'));
             const paymentCompletedIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('payment completed'));
             csvData.forEach((row, idx) => {
-                const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
-                if (withdrawn.has(entryId)) return; // Skip withdrawn entrants
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId || withdrawn.has(entryId)) return; // Skip withdrawn entrants
                 total++;
                 // Count missing photo ID - entries WITHOUT a checkmark in photo id column
                 if (!photoIdVerified[entryId]) {
