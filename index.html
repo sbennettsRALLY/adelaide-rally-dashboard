@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.71 - Fix withdrawn sync + show entry count in sync badge for data-divergence visibility 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.72 - Sync diagnostics: show row count + account email in status, Force Sync reveals what Dropbox contained 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.71';
+        const DASHBOARD_VERSION = 'v3.72';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4012,6 +4012,7 @@
 
         // Dropbox Cloud Sync Functions
         let dropboxSyncEnabled = false;
+        let dropboxAccountEmail = ''; // populated on connect — used in sync diagnostics
         let dropboxSyncTimer = null;
         let dropboxDbx = null;
         let lastSyncTimestamp = 0;
@@ -4203,6 +4204,9 @@
                         // IDs from old CSV uploads which would give a misleadingly low active number.)
                         const rowCount = csvData.length > 0 ? ' · ' + csvData.length + ' rows' : '';
                         statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss + rowCount;
+                        // Tooltip shows account email + file path — hover to verify correct account
+                        statusDiv.title = (dropboxAccountEmail ? 'Account: ' + dropboxAccountEmail + '\n' : '')
+                            + 'File: ' + DROPBOX_STATE_FILE;
                     } else {
                         statusDiv.textContent = '⏳ Connecting…';
                     }
@@ -4301,6 +4305,18 @@
                 lastSyncTimestamp = Date.now();
                 updateDropboxStatus();
                 if (csvData.length > 0) switchView(currentView, false);
+                // Show diagnostic alert so users can report exactly what their Dropbox contained.
+                // This reveals wrong-account and wrong-file issues immediately.
+                const _savedAt = remoteState.timestamp
+                    ? new Date(remoteState.timestamp).toLocaleString()
+                    : 'unknown';
+                alert(
+                    '✓ Force sync complete\n\n' +
+                    'Rows loaded from Dropbox: ' + csvData.length + '\n' +
+                    'Dropbox file last saved: ' + _savedAt + '\n' +
+                    (dropboxAccountEmail ? 'Dropbox account: ' + dropboxAccountEmail : '') +
+                    '\n\nIf these numbers look wrong, screenshot this message and send to your coordinator.'
+                );
                 console.log('✓ Force sync from Dropbox complete. Entries:', csvData.length);
             } catch(e) {
                 alert('Force sync failed: ' + e.message);
@@ -4338,6 +4354,19 @@
                     return;
                 }
                 dropboxSyncEnabled = true;
+                // Fetch connected account email for sync diagnostics.
+                // If a user is on a wrong Dropbox account this will reveal it immediately.
+                try {
+                    const acctResp = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (acctResp.ok) {
+                        const acct = await acctResp.json();
+                        dropboxAccountEmail = acct.email || '';
+                        console.log('✓ Dropbox connected as:', dropboxAccountEmail);
+                    }
+                } catch(e) { /* non-critical */ }
                 console.log('✓ Dropbox REST API sync initialized');
                 // Initial pull — show overlay so users see Dropbox data, not stale localStorage
                 const localAheadOnInit = await syncFromDropbox();
