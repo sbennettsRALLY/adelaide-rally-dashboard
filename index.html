@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.65 - Green sync status only shows on genuine Dropbox success: track failure count, staleness check, fix silent error paths 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.66 - Fix ghost entries: uploaded CSV is authoritative, never append Dropbox rows on upload 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.65';
+        const DASHBOARD_VERSION = 'v3.66';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1486,30 +1486,23 @@
                         uploadedEntryIdIdx >= 0 ? uploadedData.map(r => r[uploadedEntryIdIdx]).filter(Boolean).map(String) : []
                     );
 
-                    // Pull from Dropbox to merge checkbox states and discover any entries
-                    // added to the form system AFTER this CSV was exported.
-                    // NOTE: syncFromDropbox() may replace csvData/csvHeaders — we'll re-apply the
-                    // uploaded data afterward so corrections are never lost.
+                    // Pull from Dropbox to merge checkbox states only (photoId, disclaimer, etc).
+                    // We intentionally do NOT add any CSV rows from Dropbox — the uploaded CSV
+                    // is always a complete export from the entry system and is the single source
+                    // of truth for who is entered. Adding Dropbox rows would re-introduce deleted
+                    // entrants as ghost entries that can never be removed.
                     if (dropboxSyncEnabled) {
                         await syncFromDropbox().catch(e => console.warn('⚠ Pre-upload Dropbox pull failed:', e));
                     }
 
-                    // Re-establish uploaded CSV as the source of truth for existing entries.
-                    // Add any entries that are in the Dropbox version but NOT in this upload
-                    // (those are new sign-ups submitted after the export was generated).
-                    const remoteEntryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                    const extraRows = csvData.filter(row => {
-                        const rid = remoteEntryIdIdx >= 0 ? String(row[remoteEntryIdIdx] || '') : '';
-                        return rid && !uploadedIds.has(rid);
-                    });
-
-                    csvData            = [...uploadedData, ...extraRows];
+                    // Re-establish the uploaded CSV as the authoritative row set.
+                    // syncFromDropbox() may have changed csvData — override it here.
+                    csvData            = uploadedData;
                     csvHeaders         = uploadedHeaders;
                     csvUploadTimestamp = uploadTs;
 
                     saveToStorage();
-                    const extraMsg = extraRows.length > 0 ? ` (+${extraRows.length} newer entries from Dropbox)` : '';
-                    showMessage('csvMsg', 'success', `✓ Loaded ${uploadedData.length} entries${extraMsg}`);
+                    showMessage('csvMsg', 'success', `✓ Loaded ${uploadedData.length} entries`);
                     switchView('doc-chase');
                     renderDocTable();
                     updateDocStats();
