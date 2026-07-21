@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.63 - Multi-user sync: startup loading overlay, Dropbox disconnect banner, force sync button, auto push-back when local has changes remote doesn't 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.64 - Version badge in header; fix MA licence checkbox auto re-tick: store false explicitly, push immediately on change, remote-wins-per-entry merge 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -568,6 +568,7 @@
                 <p>Entrant Tracking Tool</p>
             </div>
             <div class="hdr-actions">
+                <span id="versionBadge" style="font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;letter-spacing:0.03em;margin-right:4px;"></span>
                 <button class="dropbox-auth-btn" id="dropboxAuthBtn" onclick="initiateDropboxAuth()">Connect to Server</button>
                 <button class="btn-reset" id="dropboxForceSyncBtn" onclick="forceSyncFromDropbox()" style="display:none;font-size:11px;padding:3px 8px;" title="Force pull latest data from Dropbox (overwrites local state)">↻ Force Sync</button>
                 <div class="dropbox-status" id="dropboxStatus">✓ Connected</div>
@@ -1158,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.63';
+        const DASHBOARD_VERSION = 'v3.64';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1445,6 +1446,9 @@
                 if (csvData.length > 0) switchView('dashboard', false);
             }
             initDropboxSyncWhenReady();
+            // Show version badge in header
+            const vb = document.getElementById('versionBadge');
+            if (vb) vb.textContent = DASHBOARD_VERSION;
             // Version check: run once after 5s, then every 5 minutes
             setTimeout(() => { checkForUpdates(); setInterval(checkForUpdates, 5 * 60 * 1000); }, 5000);
             // Stop sync and save before unload
@@ -2127,8 +2131,14 @@
                 maLicenceCheckbox.disabled = maLicenceChecked[entryId + '_locked'] || false;
                 maLicenceCheckbox.title = maLicenceChecked[entryId + '_locked'] ? 'Verified via MA report' : 'Manual MA Licence check';
                 maLicenceCheckbox.addEventListener('click', (e) => {
-                    if (e.target.checked) { maLicenceChecked[entryId] = true; } else { delete maLicenceChecked[entryId]; }
+                    // Store explicit false (not delete) so Dropbox can propagate unticks to other users
+                    maLicenceChecked[entryId] = e.target.checked ? true : false;
                     saveToStorage();
+                    // Push immediately (bypass debounce) so the untick reaches Dropbox before
+                    // the next auto-pull fires and re-ticks via stale remote state
+                    if (dropboxSyncEnabled) {
+                        syncToDropbox().catch(err => console.warn('⚠ MA licence push failed:', err));
+                    }
                     updateDocStats();
                     updateRowStyling(idx);
                     filterDocuments();
@@ -4211,7 +4221,7 @@
                 customCarSlots       = Array.isArray(remoteState.customCarSlots) ? remoteState.customCarSlots : [];
                 manualNavMatches     = Array.isArray(remoteState.manualNavMatches) ? remoteState.manualNavMatches : [];
                 maLicenceVerification = remoteState.maLicenceVerification || {};
-                maLicenceChecked     = _ot(remoteState.maLicenceChecked);
+                maLicenceChecked     = remoteState.maLicenceChecked || {}; // preserve false values (unticks)
                 maExpiryOverride     = remoteState.maExpiryOverride || {};
 
                 // Persist hard-replaced state to localStorage
@@ -4325,7 +4335,7 @@
                     customCarSlots: customCarSlots,
                     manualNavMatches: manualNavMatches,
                     maLicenceVerification: maLicenceVerification,
-                    maLicenceChecked: _t(maLicenceChecked),
+                    maLicenceChecked: maLicenceChecked, // keep false values so unticks propagate via Dropbox
                     maExpiryOverride: maExpiryOverride,
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
@@ -4582,11 +4592,21 @@
                         });
                     }
 
-                    // Merge maLicenceChecked: union of all true values (strip false so unticked local can't silence remote true)
+                    // Merge maLicenceChecked: "remote wins per-entry" — NOT union-true.
+                    // Unlike other checkbox fields, MA licence checks CAN be unticked (correction).
+                    // Remote value takes precedence for any entry Dropbox has seen (true OR false).
+                    // Local-only entries (not yet pushed to Dropbox) are preserved.
                     if (remoteState.maLicenceChecked && typeof remoteState.maLicenceChecked === 'object') {
-                        if (isLocalAhead(remoteState.maLicenceChecked, maLicenceChecked)) localAhead = true;
-                        const merged = { ...onlyTrue(remoteState.maLicenceChecked), ...onlyTrue(maLicenceChecked) };
-                        if (JSON.stringify(merged) !== JSON.stringify(onlyTrue(maLicenceChecked))) {
+                        const merged = { ...maLicenceChecked }; // start with local
+                        Object.entries(remoteState.maLicenceChecked).forEach(([k, v]) => {
+                            merged[k] = v; // remote wins per-entry (propagates both ticks and unticks)
+                        });
+                        // Check if local has entries not in remote (we'll need to push them back)
+                        const remoteKeys = new Set(Object.keys(remoteState.maLicenceChecked));
+                        if (Object.keys(maLicenceChecked).some(k => !remoteKeys.has(k) && maLicenceChecked[k])) {
+                            localAhead = true;
+                        }
+                        if (JSON.stringify(merged) !== JSON.stringify(maLicenceChecked)) {
                             maLicenceChecked = merged;
                             stateUpdated = true;
                         }
