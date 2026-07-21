@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.66 - Fix ghost entries: uploaded CSV is authoritative, never append Dropbox rows on upload 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.67 - Fix ghost entries: local-wins sync path also must not append Dropbox rows 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1159,7 +1159,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.66';
+        const DASHBOARD_VERSION = 'v3.67';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4461,22 +4461,13 @@
                             console.log('✓ CSV replaced from Dropbox:', remoteCount, 'entries (local had', localCount,
                                         '| remote ts:', remoteTs, 'local ts:', localTs, ')');
                         } else {
-                            // Local CSV was uploaded more recently — keep it, but add any new
-                            // entry IDs from remote (handles rows added after this upload).
-                            const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                            const existingIds = new Set(
-                                entryIdIdx >= 0 ? csvData.map(r => r[entryIdIdx]).filter(Boolean) : []
-                            );
-                            const remoteIdIdx = remoteState.csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
-                            remoteState.csvData.forEach(remoteRow => {
-                                const remoteId = remoteIdIdx >= 0 ? remoteRow[remoteIdIdx] : null;
-                                if (remoteId && !existingIds.has(remoteId)) {
-                                    csvData.push(remoteRow);
-                                    hasChanges = true;
-                                    localAhead = true; // local has extra rows Dropbox doesn't
-                                }
-                            });
-                            if (hasChanges) console.log('✓ Merged CSV — added rows from Dropbox. Total:', csvData.length);
+                            // Local CSV was uploaded more recently — keep it exactly as-is.
+                            // The uploaded CSV is a complete export from the entry system and
+                            // is the single source of truth for who is entered. Adding rows
+                            // from Dropbox would re-introduce deleted entrants as ghost entries.
+                            // Signal that local is ahead so the sync timer pushes to Dropbox.
+                            localAhead = true;
+                            console.log('✓ Local CSV is newer — keeping local (' + csvData.length + ' entries), will push to Dropbox.');
                         }
                     }
 
