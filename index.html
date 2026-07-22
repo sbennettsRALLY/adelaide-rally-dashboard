@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.76 - Fix updateDocStats entryId trim + skip empty IDs, fix maLicenceChecked localAhead bug 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.77 - Add CSV upload date to sync tooltip 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1160,7 +1160,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.76';
+        const DASHBOARD_VERSION = 'v3.77';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4208,9 +4208,13 @@
                         // IDs from old CSV uploads which would give a misleadingly low active number.)
                         const rowCount = csvData.length > 0 ? ' · ' + csvData.length + ' rows' : '';
                         statusDiv.textContent = '✓ Synced ' + hh + ':' + mm + ':' + ss + rowCount;
-                        // Tooltip shows account email + file path — hover to verify correct account
+                        // Tooltip shows account email + file path + CSV upload date — hover to verify correct account and CSV
+                        const csvUploadDate = csvUploadTimestamp
+                            ? 'CSV uploaded: ' + new Date(csvUploadTimestamp).toLocaleString()
+                            : '';
                         statusDiv.title = (dropboxAccountEmail ? 'Account: ' + dropboxAccountEmail + '\n' : '')
-                            + 'File: ' + DROPBOX_STATE_FILE;
+                            + 'File: ' + DROPBOX_STATE_FILE
+                            + (csvUploadDate ? '\n' + csvUploadDate : '');
                     } else {
                         statusDiv.textContent = '⏳ Connecting…';
                     }
