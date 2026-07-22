@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.84 - Fix car number assign race with Dropbox sync by passing value directly 2026-07-22 -->
+<!-- Adelaide Rally 2026 Dashboard v3.85 - Skip car number re-render during Dropbox sync when dropdown is open 2026-07-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1218,7 +1218,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.84';
+        const DASHBOARD_VERSION = 'v3.85';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4962,9 +4962,19 @@
                     if (localAhead) {
                         console.log('ℹ Local has state not yet in Dropbox — will push back');
                     }
-                    // Always refresh the current view after a Dropbox sync
+                    // Always refresh the current view after a Dropbox sync,
+                    // except: skip re-rendering Car Numbers if the user has a <select> focused
+                    // (rebuilding the DOM destroys the open native dropdown and closes it).
+                    // The next 5-second sync cycle will pick up any changes after they finish.
                     if (csvData.length > 0) {
-                        switchView(currentView, false);
+                        const _activeEl = document.activeElement;
+                        const _cnView   = document.getElementById('car-numbers');
+                        const _dropdownOpen = currentView === 'car-numbers' &&
+                            _activeEl && _activeEl.tagName === 'SELECT' &&
+                            _cnView && _cnView.contains(_activeEl);
+                        if (!_dropdownOpen) {
+                            switchView(currentView, false);
+                        }
                     }
                     return localAhead;
                 } else {
