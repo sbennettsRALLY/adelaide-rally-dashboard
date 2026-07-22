@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.78 - Add email column to MA Licence obtain table 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.79 - Add email to MA Licence obtain table and Excel export 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1160,7 +1160,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.78';
+        const DASHBOARD_VERSION = 'v3.79';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -5442,7 +5442,7 @@
                     }
                 });
                 medicalIdxs.sort((a, b) => a.order - b.order);
-                const maLicenceData = [['Entry #', 'Name', 'DOB', ...addressIdxs.map((_, i) => `Address ${i + 1}`), 'Fit & Proper', 'Crashtag Consent', ...medicalIdxs.map(m => m.condensed)]];
+                const maLicenceData = [['Entry #', 'Name', 'Email', 'DOB', ...addressIdxs.map((_, i) => `Address ${i + 1}`), 'Fit & Proper', 'Crashtag Consent', ...medicalIdxs.map(m => m.condensed)]];
                 sortedIndices.forEach(idx => {
                     const row = csvData[idx];
                     const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
@@ -5452,10 +5452,11 @@
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                     const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                     const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
+                    const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
                     const dob = dobIdx >= 0 ? row[dobIdx] || '' : '';
                     const fitProper = fitProperIdx >= 0 ? row[fitProperIdx] || '' : '';
                     const crashtag = crashtagIdx >= 0 ? row[crashtagIdx] || '' : '';
-                    const rowData = [entryId, name, dob];
+                    const rowData = [entryId, name, email, dob];
                     addressIdxs.forEach(addrIdx => rowData.push(row[addrIdx] || ''));
                     rowData.push(fitProper, crashtag);
                     medicalIdxs.forEach(medCol => rowData.push(row[medCol.index] || ''));
