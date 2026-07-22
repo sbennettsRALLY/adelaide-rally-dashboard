@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.79 - Add email to MA Licence obtain table and Excel export 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.80 - Add Add Ons tab with T-Shirt/Phone Cradle/Phone Charger/Media Pack detail 2026-07-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -591,6 +591,7 @@
             <button class="nav-btn" onclick="switchView('withdrawals')">Withdrawals</button>
             <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
             <button class="nav-btn" onclick="switchView('car-numbers')">🔢 Car Numbers</button>
+            <button class="nav-btn" onclick="switchView('add-ons')">Add Ons</button>
         </div>
     </div>
     <div class="main">
@@ -1147,6 +1148,63 @@
         </div>
         <!-- ══ END CAR NUMBERS PAGE ══════════════════════════════════════════ -->
 
+        <!-- ══ ADD ONS PAGE ══════════════════════════════════════════════════ -->
+        <div id="add-ons" class="view">
+            <div id="addOnsMsg" class="message"></div>
+            <div class="sec-title">Add On Item Orders</div>
+            <div class="filters">
+                <input type="text" id="addOnsSearch" class="fins" placeholder="Search entries..." oninput="renderAddOnsTable()" />
+                <select id="addOnsFilterEntryType" class="fsel" onchange="renderAddOnsTable()">
+                    <option value="">All Entry Types</option>
+                </select>
+                <select id="addOnsFilterCategory" class="fsel" onchange="renderAddOnsTable()">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+            <div class="stat-row">
+                <div class="stat-chip no-click">
+                    <div class="num" id="addOnsTotal">0</div>
+                    <div class="lbl">Entrants w/ Add Ons</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="addOnsTshirtCount">0</div>
+                    <div class="lbl">T-Shirts</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="addOnsPhoneCradleCount">0</div>
+                    <div class="lbl">Phone Cradles</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="addOnsPhoneChargerCount">0</div>
+                    <div class="lbl">Phone Chargers</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="addOnsMediaPackCount">0</div>
+                    <div class="lbl">Media Packs</div>
+                </div>
+            </div>
+            <div class="tbl-wrap">
+                <table id="addOnsTable" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Entry #</th>
+                            <th>Car #</th>
+                            <th>Name</th>
+                            <th>Category</th>
+                            <th>Phone</th>
+                            <th>T-Shirt</th>
+                            <th>Phone Cradle</th>
+                            <th>Phone Charger</th>
+                            <th>Media Pack</th>
+                        </tr>
+                    </thead>
+                    <tbody id="addOnsBody"></tbody>
+                </table>
+            </div>
+            <div id="addOnsNoData" class="no-data">No data loaded. Please upload a CSV file.</div>
+        </div>
+        <!-- ══ END ADD ONS PAGE ══════════════════════════════════════════════ -->
+
     </div>
     <footer>
         Adelaide Rally Entry Management System | Data synced to Dropbox
@@ -1160,7 +1218,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.79';
+        const DASHBOARD_VERSION = 'v3.80';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -3854,6 +3912,8 @@
                 renderWithdrawalTab();
             } else if (viewName === 'car-numbers') {
                 renderCarNumbers();
+            } else if (viewName === 'add-ons') {
+                renderAddOnsTable();
             }
             // Only scroll to top if this is a manual view switch (not an auto-sync refresh)
             if (scrollToTop) {
@@ -5464,7 +5524,74 @@
                 });
                 const maLicenceWs = XLSX.utils.aoa_to_sheet(maLicenceData);
                 XLSX.utils.book_append_sheet(wb, maLicenceWs, 'MA Licence');
-                // ===== SHEET 4: Nav Marry (Pairs & Unmatched) =====
+                // ===== SHEET 4: Add Ons =====
+                {
+                    const aoEntryIdIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                    const aoFirstNameIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+                    const aoLastNameIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+                    const aoPhoneIdx      = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+                    const aoEntryTypeIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+                    const aoCategoryIdxs  = csvHeaders.map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1).filter(i => i >= 0);
+                    const aoTshirtConfig    = additionalItemsConfig.find(c => c.item === 'T-Shirt');
+                    const aoCradleConfig    = additionalItemsConfig.find(c => c.item === 'Phone Cradle');
+                    const aoChargerConfig   = additionalItemsConfig.find(c => c.item === 'Phone Charger');
+                    const aoMediaConfig     = additionalItemsConfig.find(c => c.item === 'Media Pack');
+                    const aoTshirtIdx    = aoTshirtConfig    ? csvHeaders.findIndex(h => h === aoTshirtConfig.header)    : -1;
+                    const aoCradleIdx    = aoCradleConfig    ? csvHeaders.findIndex(h => h === aoCradleConfig.header)    : -1;
+                    const aoChargerIdx   = aoChargerConfig   ? csvHeaders.findIndex(h => h === aoChargerConfig.header)   : -1;
+                    const aoMediaIdx     = aoMediaConfig     ? csvHeaders.findIndex(h => h === aoMediaConfig.header)     : -1;
+                    const aoTshirtSizeIdx = csvHeaders.findIndex(h => {
+                        const l = h.toLowerCase();
+                        return (l.includes('long sleeve') && l.includes('size')) ||
+                               (l.includes('t-shirt') && l.includes('size')) ||
+                               (l.includes('tshirt') && l.includes('size')) ||
+                               (l.includes('shirt') && l.includes('size'));
+                    });
+                    const aoEntryToCarNum = {};
+                    Object.entries(carNumberAssignments).forEach(([cn, asgn]) => {
+                        if (asgn && asgn.entryId) aoEntryToCarNum[asgn.entryId] = cn;
+                    });
+                    const aoData = [['Entry #', 'Car #', 'Name', 'Category', 'Phone', 'T-Shirt', 'Phone Cradle', 'Phone Charger', 'Media Pack']];
+                    const aoSorted = Array.from({length: csvData.length}, (_, i) => i)
+                        .sort((a, b) => {
+                            const ea = aoEntryIdIdx >= 0 ? parseInt(csvData[a][aoEntryIdIdx]) || 0 : 0;
+                            const eb = aoEntryIdIdx >= 0 ? parseInt(csvData[b][aoEntryIdIdx]) || 0 : 0;
+                            return ea - eb;
+                        });
+                    aoSorted.forEach(idx => {
+                        const row = csvData[idx];
+                        const eid = aoEntryIdIdx >= 0 ? (row[aoEntryIdIdx] || '').trim() : '';
+                        if (!eid || withdrawn.has(eid)) return;
+                        const tshirtVal  = aoTshirtIdx  >= 0 ? (row[aoTshirtIdx]  || '').toLowerCase().trim() : '';
+                        const cradleVal  = aoCradleIdx  >= 0 ? (row[aoCradleIdx]  || '').toLowerCase().trim() : '';
+                        const chargerVal = aoChargerIdx >= 0 ? (row[aoChargerIdx] || '').toLowerCase().trim() : '';
+                        const mediaVal   = aoMediaIdx   >= 0 ? (row[aoMediaIdx]   || '').trim() : '';
+                        const hasTshirt    = aoTshirtConfig  && tshirtVal  === aoTshirtConfig.trigger.toLowerCase();
+                        const hasCradle    = aoCradleConfig  && cradleVal  === aoCradleConfig.trigger.toLowerCase();
+                        const hasCharger   = aoChargerConfig && chargerVal === aoChargerConfig.trigger.toLowerCase();
+                        const hasMedia     = aoMediaConfig   && mediaVal   === aoMediaConfig.trigger;
+                        if (!hasTshirt && !hasCradle && !hasCharger && !hasMedia) return;
+                        const firstName = aoFirstNameIdx >= 0 ? row[aoFirstNameIdx] || '' : '';
+                        const lastName  = aoLastNameIdx  >= 0 ? row[aoLastNameIdx]  || '' : '';
+                        const name      = [firstName, lastName].filter(Boolean).join(' ');
+                        const category  = getCategory(row, aoCategoryIdxs);
+                        const phone     = aoPhoneIdx >= 0 ? row[aoPhoneIdx] || '' : '';
+                        const carNum    = aoEntryToCarNum[eid] || '';
+                        const tshirtDisplay = hasTshirt
+                            ? (aoTshirtSizeIdx >= 0 ? (row[aoTshirtSizeIdx] || '').trim() || '✓' : '✓')
+                            : '';
+                        aoData.push([
+                            eid, carNum, name, category, phone,
+                            tshirtDisplay,
+                            hasCradle  ? '✓' : '',
+                            hasCharger ? '✓' : '',
+                            hasMedia   ? '✓' : ''
+                        ]);
+                    });
+                    const aoWs = XLSX.utils.aoa_to_sheet(aoData);
+                    XLSX.utils.book_append_sheet(wb, aoWs, 'Add Ons');
+                }
+                // ===== SHEET 5: Nav Marry (Pairs & Unmatched) =====
                 const mainEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
                 const nomNavFirstNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('what is your navigator\'s name') && h.toLowerCase().includes('first'));
                 const nomNavLastNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('what is your navigator\'s name') && h.toLowerCase().includes('last'));
@@ -6747,6 +6874,158 @@
             saveToStorage();
             renderCarNumbers();
             showMessage('cnMsg', 'success', `✓ ${driverName} assigned to car #${carNum}`);
+        }
+
+        // ── Add Ons Tab ─────────────────────────────────────────────────────
+        function renderAddOnsTable() {
+            const noData = document.getElementById('addOnsNoData');
+            const tbl = document.getElementById('addOnsTable');
+            const tbody = document.getElementById('addOnsBody');
+            if (!csvData || csvData.length === 0) {
+                noData.style.display = 'block';
+                tbl.style.display = 'none';
+                return;
+            }
+
+            // Column indices
+            const entryIdIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const firstNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lastNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const phoneIdx = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+            const entryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const categoryIdxs = csvHeaders.map((h, i) => h.toLowerCase().includes('i am entering') ? i : -1).filter(i => i >= 0);
+
+            // Add-on config (skip first 3: MA Licence, Prima Tour Licence, Driver Swap)
+            const tshirtConfig    = additionalItemsConfig.find(c => c.item === 'T-Shirt');
+            const cradleConfig    = additionalItemsConfig.find(c => c.item === 'Phone Cradle');
+            const chargerConfig   = additionalItemsConfig.find(c => c.item === 'Phone Charger');
+            const mediaPackConfig = additionalItemsConfig.find(c => c.item === 'Media Pack');
+
+            const tshirtIdx    = tshirtConfig    ? csvHeaders.findIndex(h => h === tshirtConfig.header)    : -1;
+            const cradleIdx    = cradleConfig    ? csvHeaders.findIndex(h => h === cradleConfig.header)    : -1;
+            const chargerIdx   = chargerConfig   ? csvHeaders.findIndex(h => h === chargerConfig.header)   : -1;
+            const mediaPackIdx = mediaPackConfig ? csvHeaders.findIndex(h => h === mediaPackConfig.header) : -1;
+
+            // T-shirt size: look for a companion column with 'long sleeve' + 'size', or 'shirt' + 'size'
+            const tshirtSizeIdx = csvHeaders.findIndex(h => {
+                const l = h.toLowerCase();
+                return (l.includes('long sleeve') && l.includes('size')) ||
+                       (l.includes('t-shirt') && l.includes('size')) ||
+                       (l.includes('tshirt') && l.includes('size')) ||
+                       (l.includes('shirt') && l.includes('size'));
+            });
+
+            // Reverse lookup: entryId → car number
+            const entryToCarNum = {};
+            Object.entries(carNumberAssignments).forEach(([carNum, assignment]) => {
+                if (assignment && assignment.entryId) entryToCarNum[assignment.entryId] = carNum;
+            });
+
+            // Populate filter dropdowns (preserve current selection)
+            const etSel  = document.getElementById('addOnsFilterEntryType');
+            const catSel = document.getElementById('addOnsFilterCategory');
+            const etVal  = etSel.value;
+            const catVal = catSel.value;
+            const entryTypesSet = new Set(), categoriesSet = new Set();
+            csvData.forEach(row => {
+                const eid = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!eid || withdrawn.has(eid)) return;
+                if (entryTypeIdx >= 0 && row[entryTypeIdx]) entryTypesSet.add(row[entryTypeIdx]);
+                const cat = getCategory(row, categoryIdxs);
+                if (cat) categoriesSet.add(cat);
+            });
+            etSel.innerHTML = '<option value="">All Entry Types</option>';
+            [...entryTypesSet].sort().forEach(t => {
+                const o = document.createElement('option'); o.value = t; o.textContent = t; etSel.appendChild(o);
+            });
+            if ([...etSel.options].some(o => o.value === etVal)) etSel.value = etVal;
+            catSel.innerHTML = '<option value="">All Categories</option>';
+            [...categoriesSet].sort().forEach(c => {
+                const o = document.createElement('option'); o.value = c; o.textContent = c; catSel.appendChild(o);
+            });
+            if ([...catSel.options].some(o => o.value === catVal)) catSel.value = catVal;
+
+            // Filters
+            const searchTerm     = (document.getElementById('addOnsSearch').value || '').toLowerCase();
+            const filterEntryType = etSel.value;
+            const filterCategory  = catSel.value;
+
+            // Sort rows by entry number
+            const sortedIndices = Array.from({length: csvData.length}, (_, i) => i)
+                .sort((a, b) => {
+                    const ea = entryIdIdx >= 0 ? parseInt(csvData[a][entryIdIdx]) || 0 : 0;
+                    const eb = entryIdIdx >= 0 ? parseInt(csvData[b][entryIdIdx]) || 0 : 0;
+                    return ea - eb;
+                });
+
+            tbody.innerHTML = '';
+            let totalRows = 0, tshirtCount = 0, cradleCount = 0, chargerCount = 0, mediaPackCount = 0;
+
+            sortedIndices.forEach(idx => {
+                const row = csvData[idx];
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId || withdrawn.has(entryId)) return;
+
+                // Check which add-ons were ordered
+                const tshirtVal  = tshirtIdx    >= 0 ? (row[tshirtIdx]    || '').toLowerCase().trim() : '';
+                const cradleVal  = cradleIdx    >= 0 ? (row[cradleIdx]    || '').toLowerCase().trim() : '';
+                const chargerVal = chargerIdx   >= 0 ? (row[chargerIdx]   || '').toLowerCase().trim() : '';
+                const mediaVal   = mediaPackIdx >= 0 ? (row[mediaPackIdx] || '').trim() : '';
+
+                const hasTshirt    = tshirtConfig    && tshirtVal  === tshirtConfig.trigger.toLowerCase();
+                const hasCradle    = cradleConfig    && cradleVal  === cradleConfig.trigger.toLowerCase();
+                const hasCharger   = chargerConfig   && chargerVal === chargerConfig.trigger.toLowerCase();
+                const hasMediaPack = mediaPackConfig && mediaVal   === mediaPackConfig.trigger;
+
+                if (!hasTshirt && !hasCradle && !hasCharger && !hasMediaPack) return;
+
+                const firstName  = firstNameIdx  >= 0 ? row[firstNameIdx]  || '' : '';
+                const lastName   = lastNameIdx   >= 0 ? row[lastNameIdx]   || '' : '';
+                const category   = getCategory(row, categoryIdxs);
+                const entryType  = entryTypeIdx  >= 0 ? (row[entryTypeIdx] || '') : '';
+
+                if (filterEntryType && entryType !== filterEntryType) return;
+                if (filterCategory  && category  !== filterCategory)  return;
+
+                const searchable = [entryId, firstName, lastName, category, entryType].join(' ').toLowerCase();
+                if (searchTerm && !searchable.includes(searchTerm)) return;
+
+                totalRows++;
+                if (hasTshirt)    tshirtCount++;
+                if (hasCradle)    cradleCount++;
+                if (hasCharger)   chargerCount++;
+                if (hasMediaPack) mediaPackCount++;
+
+                const carNum   = entryToCarNum[entryId] || '';
+                const phone    = phoneIdx >= 0 ? row[phoneIdx] || '' : '';
+                const name     = [firstName, lastName].filter(Boolean).join(' ');
+                const tshirtDisplay = hasTshirt
+                    ? (tshirtSizeIdx >= 0 ? (row[tshirtSizeIdx] || '').trim() || '✓' : '✓')
+                    : '';
+
+                const tr = document.createElement('tr');
+                [entryId, carNum, name, category, phone,
+                 tshirtDisplay,
+                 hasCradle    ? '✓' : '',
+                 hasCharger   ? '✓' : '',
+                 hasMediaPack ? '✓' : ''
+                ].forEach(val => {
+                    const td = document.createElement('td');
+                    td.textContent = val;
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+
+            // Update stat chips
+            document.getElementById('addOnsTotal').textContent          = totalRows;
+            document.getElementById('addOnsTshirtCount').textContent    = tshirtCount;
+            document.getElementById('addOnsPhoneCradleCount').textContent = cradleCount;
+            document.getElementById('addOnsPhoneChargerCount').textContent = chargerCount;
+            document.getElementById('addOnsMediaPackCount').textContent  = mediaPackCount;
+
+            noData.style.display = totalRows === 0 ? 'block' : 'none';
+            tbl.style.display    = totalRows === 0 ? 'none'  : 'table';
         }
 
         // ── Render ──────────────────────────────────────────────────────────
