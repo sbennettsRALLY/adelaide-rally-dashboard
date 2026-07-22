@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.82 - Withdrawal clears car number assignment so slot becomes available 2026-07-22 -->
+<!-- Adelaide Rally 2026 Dashboard v3.83 - Car number reconcile panel assigns on dropdown select (no button click needed) 2026-07-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1218,7 +1218,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.82';
+        const DASHBOARD_VERSION = 'v3.83';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -7177,9 +7177,16 @@
                             const sel = document.createElement('select');
                             sel.id = selId;
                             sel.style.cssText = 'font-size:11px; padding:3px 5px; border:1px solid #ccc; border-radius:4px; max-width:160px;';
+                            const capturedSelId2 = selId;
+                            const capturedEid2   = d.entryId;
+                            const capturedName2  = d.driverName;
+                            sel.onchange = function() {
+                                if (this.value) cnAssignFromReconcile(capturedEid2, capturedName2, capturedSelId2);
+                            };
+
                             const blankOpt = document.createElement('option');
                             blankOpt.value = '';
-                            blankOpt.textContent = '— select —';
+                            blankOpt.textContent = '— select car number —';
                             sel.appendChild(blankOpt);
 
                             // Group available slots: own category first, then TL/TF, then others
@@ -7208,16 +7215,7 @@
                             addGroup('TL / TF Vehicles', tlTfSlots);
                             addGroup('Other categories', ownCatMapped ? otherSlots : [...ownSlots, ...otherSlots]);
 
-                            const btn = document.createElement('button');
-                            btn.textContent = '✓ Assign';
-                            btn.style.cssText = 'margin-left:6px; font-size:10px; padding:3px 8px; background:#22c55e; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;';
-                            const capturedSelId = selId;
-                            const capturedEid = d.entryId;
-                            const capturedName = d.driverName;
-                            btn.onclick = function() { cnAssignFromReconcile(capturedEid, capturedName, capturedSelId); };
-
                             tdAssign.appendChild(sel);
-                            tdAssign.appendChild(btn);
                             tr.appendChild(tdEid);
                             tr.appendChild(tdName);
                             tr.appendChild(tdCat);
