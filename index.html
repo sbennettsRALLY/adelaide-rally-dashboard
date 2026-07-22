@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.83 - Car number reconcile panel assigns on dropdown select (no button click needed) 2026-07-22 -->
+<!-- Adelaide Rally 2026 Dashboard v3.84 - Fix car number assign race with Dropbox sync by passing value directly 2026-07-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1218,7 +1218,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.83';
+        const DASHBOARD_VERSION = 'v3.84';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -6889,10 +6889,7 @@
             renderCarNumbers();
         }
 
-        function cnAssignFromReconcile(entryId, driverName, selectElemId) {
-            const selectElem = document.getElementById(selectElemId);
-            if (!selectElem) return;
-            const carNum = selectElem.value;
+        function cnAssignFromReconcile(entryId, driverName, carNum) {
             if (!carNum) { showMessage('cnMsg', 'error', '❌ Please select a car number first.'); return; }
             // Remove any existing assignment for this entry
             Object.keys(carNumberAssignments).forEach(cn => {
@@ -7177,11 +7174,13 @@
                             const sel = document.createElement('select');
                             sel.id = selId;
                             sel.style.cssText = 'font-size:11px; padding:3px 5px; border:1px solid #ccc; border-radius:4px; max-width:160px;';
-                            const capturedSelId2 = selId;
-                            const capturedEid2   = d.entryId;
-                            const capturedName2  = d.driverName;
+                            const capturedEid2  = d.entryId;
+                            const capturedName2 = d.driverName;
                             sel.onchange = function() {
-                                if (this.value) cnAssignFromReconcile(capturedEid2, capturedName2, capturedSelId2);
+                                // Pass the car number directly — don't look up by element ID,
+                                // because a Dropbox sync may have rebuilt the DOM by the time
+                                // onchange fires, making getElementById return a blank new element.
+                                if (this.value) cnAssignFromReconcile(capturedEid2, capturedName2, this.value);
                             };
 
                             const blankOpt = document.createElement('option');
