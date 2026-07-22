@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.80 - Add Add Ons tab with T-Shirt/Phone Cradle/Phone Charger/Media Pack detail 2026-07-22 -->
+<!-- Adelaide Rally 2026 Dashboard v3.81 - Fix withdrawal filtering across dashboard, Excel export, and re-render on change 2026-07-22 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1218,7 +1218,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.80';
+        const DASHBOARD_VERSION = 'v3.81';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1833,6 +1833,7 @@
             if (csvData.length === 0) return;
 
             const localEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const localEntryIdIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
 
             // All "I am entering" column indices — same flexible lookup that getCategory() uses
             const catColIdxs = csvHeaders
@@ -1848,6 +1849,8 @@
             // Count drivers per category using getCategory() — works regardless of header names
             const categoryCounts = {};
             csvData.forEach(row => {
+                const eid = localEntryIdIdx >= 0 ? (row[localEntryIdIdx] || '').trim() : '';
+                if (eid && withdrawn.has(eid)) return; // Skip withdrawn entrants
                 if (localEntryTypeIdx >= 0 && (row[localEntryTypeIdx] || '').trim() !== 'Driver') return;
                 const rawVal = getCategory(row, catColIdxs);
                 if (!rawVal) return;
@@ -1899,13 +1902,19 @@
                     if (config.trigger.toLowerCase() === 'yes') {
                         // Accept 'yes' (any case) OR a positive numeric quantity (e.g. '1', '2')
                         qty = csvData.filter(row => {
+                            const eid = localEntryIdIdx >= 0 ? (row[localEntryIdIdx] || '').trim() : '';
+                            if (eid && withdrawn.has(eid)) return false; // Skip withdrawn
                             const val = (row[headerIdx] || '').trim().toLowerCase();
                             if (val === 'yes') return true;
                             const num = parseFloat(val);
                             return !isNaN(num) && num > 0;
                         }).length;
                     } else {
-                        qty = csvData.filter(row => (row[headerIdx] || '').trim().toLowerCase() === config.trigger.trim().toLowerCase()).length;
+                        qty = csvData.filter(row => {
+                            const eid = localEntryIdIdx >= 0 ? (row[localEntryIdIdx] || '').trim() : '';
+                            if (eid && withdrawn.has(eid)) return false; // Skip withdrawn
+                            return (row[headerIdx] || '').trim().toLowerCase() === config.trigger.trim().toLowerCase();
+                        }).length;
                     }
                     console.log(`✓ ${config.item}: header found (col ${headerIdx}), qty=${qty}`);
                 } else {
@@ -1942,10 +1951,12 @@
                 const headerIdx = csvHeaders.findIndex(h => h === config.header1);
                 let entries = 0;
                 if (headerIdx >= 0) {
-                    entries = csvData.filter(row =>
-                        row[headerIdx] === config.trigger1 &&
-                        (localEntryTypeIdx >= 0 ? (row[localEntryTypeIdx] || '').trim() === 'Driver' : true)
-                    ).length;
+                    entries = csvData.filter(row => {
+                        const eid = localEntryIdIdx >= 0 ? (row[localEntryIdIdx] || '').trim() : '';
+                        if (eid && withdrawn.has(eid)) return false; // Skip withdrawn
+                        return row[headerIdx] === config.trigger1 &&
+                            (localEntryTypeIdx >= 0 ? (row[localEntryTypeIdx] || '').trim() === 'Driver' : true);
+                    }).length;
                 }
 
                 // Find entry fee for this category
@@ -5354,6 +5365,8 @@
                 renderMALicenceChecks();
                 renderNavMarryTable();
                 filterCsvTable();
+                updateDashboardTables();
+                renderAddOnsTable();
                 showMessage('withdrawMsg', 'success', '✓ Entrant withdrawn');
             }
         }
@@ -5371,6 +5384,8 @@
                 renderMALicenceChecks();
                 renderNavMarryTable();
                 filterCsvTable();
+                updateDashboardTables();
+                renderAddOnsTable();
                 showMessage('withdrawMsg', 'success', '✓ Entrant restored');
             }
         }
@@ -5416,7 +5431,11 @@
                     const headerIdx = csvHeaders.findIndex(h => h === config.header1);
                     let entries = 0;
                     if (headerIdx >= 0) {
-                        entries = csvData.filter(row => row[headerIdx] === config.trigger1).length;
+                        entries = csvData.filter(row => {
+                            const eid = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                            if (eid && withdrawn.has(eid)) return false;
+                            return row[headerIdx] === config.trigger1;
+                        }).length;
                     }
                     totalEntries += entries;
                     totalCapacity += config.capacity;
@@ -5434,7 +5453,11 @@
                     const headerIdx = csvHeaders.findIndex(h => h === config.header);
                     let qty = 0;
                     if (headerIdx >= 0) {
-                        qty = csvData.filter(row => (row[headerIdx] || '').toLowerCase() === config.trigger.toLowerCase()).length;
+                        qty = csvData.filter(row => {
+                            const eid = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                            if (eid && withdrawn.has(eid)) return false;
+                            return (row[headerIdx] || '').toLowerCase() === config.trigger.toLowerCase();
+                        }).length;
                     }
                     const sales = qty * config.price;
                     totalQty += qty;
@@ -5824,30 +5847,27 @@
                 const navMarryWs = XLSX.utils.aoa_to_sheet(navMarryData);
                 XLSX.utils.book_append_sheet(wb, navMarryWs, 'Nav Marry');
                 // ===== SHEET 5: Withdrawals =====
+                // withdrawn stores entry ID strings — sort numerically, then find each row by ID
                 const withdrawnData = [['Entry #', 'Name', 'Email', 'Category']];
-                const withdrawnIndices = Array.from(withdrawn).sort((a, b) => a - b);
-                withdrawnIndices.forEach(idx => {
-                    if (idx >= csvData.length) return;
-                    const row = csvData[idx];
-                    const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
+                const withdrawnIdsSorted = Array.from(withdrawn).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+                withdrawnIdsSorted.forEach(withdrawnId => {
+                    const rowIdx = entryIdIdx >= 0
+                        ? csvData.findIndex(r => (r[entryIdIdx] || '').trim() === withdrawnId)
+                        : -1;
+                    if (rowIdx < 0) return; // entry no longer in CSV — skip
+                    const row = csvData[rowIdx];
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
-                    const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
-                    const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || entryId || `Entry ${idx}`);
+                    const lastName  = lastNameIdx  >= 0 ? row[lastNameIdx]  || '' : '';
+                    const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || withdrawnId);
                     const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
                     const category = getCategory(row, categoryIdxs);
-                    withdrawnData.push([entryId, name, email, category]);
+                    withdrawnData.push([withdrawnId, name, email, category]);
                 });
                 const withdrawnWs = XLSX.utils.aoa_to_sheet(withdrawnData);
                 XLSX.utils.book_append_sheet(wb, withdrawnWs, 'Withdrawals');
                 // ===== SHEET 6: Car Numbers =====
-                // Build a set of withdrawn entry IDs for status lookup
-                const exportWithdrawnEntryIds = new Set();
-                Array.from(withdrawn).forEach(idx => {
-                    if (idx < csvData.length && entryIdIdx >= 0) {
-                        const eid = (csvData[idx][entryIdIdx] || '').toString().trim();
-                        if (eid) exportWithdrawnEntryIds.add(eid);
-                    }
-                });
+                // withdrawn already contains entry ID strings — use directly
+                const exportWithdrawnEntryIds = withdrawn;
                 const cnExportSlots = getEffectiveSlots();
                 const cnExportData = [['Car #', 'Category', 'Role', 'Entry ID', 'Driver Name', 'Status']];
                 cnExportSlots.forEach(slot => {
