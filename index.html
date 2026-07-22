@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.77 - Add CSV upload date to sync tooltip 2026-07-21 -->
+<!-- Adelaide Rally 2026 Dashboard v3.78 - Add email column to MA Licence obtain table 2026-07-21 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1160,7 +1160,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.77';
+        const DASHBOARD_VERSION = 'v3.78';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -3544,6 +3544,7 @@
             const firstNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
             const lastNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
             const dobIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('date of birth'));
+            const emailIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
             const licenceIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
             const fitProperIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('fit and proper person'));
             const crashtagIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('crashtag consent'));
@@ -3589,6 +3590,7 @@
             const headers = [
                 'Entry #',
                 'Name',
+                'Email',
                 'Date of Birth',
                 ...addressIdxs.map((_, i) => `Address ${i + 1}`),
                 'Fit & Proper',
@@ -3624,7 +3626,8 @@
                 // Search filter
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
-                const searchableText = [entryId, firstName, lastName].join(' ').toLowerCase();
+                const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
+                const searchableText = [entryId, firstName, lastName, email].join(' ').toLowerCase();
                 if (!searchableText.includes(searchTerm)) {
                     return;
                 }
@@ -3638,6 +3641,10 @@
                 const tdName = document.createElement('td');
                 tdName.textContent = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
                 tr.appendChild(tdName);
+                // Email
+                const tdEmail = document.createElement('td');
+                tdEmail.textContent = emailIdx >= 0 ? row[emailIdx] || '' : '';
+                tr.appendChild(tdEmail);
                 // Date of Birth
                 const tdDOB = document.createElement('td');
                 tdDOB.textContent = dobIdx >= 0 ? row[dobIdx] || '' : '';
