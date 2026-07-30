@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.85 - Skip car number re-render during Dropbox sync when dropdown is open 2026-07-22 -->
+<!-- Adelaide Rally 2026 Dashboard v3.86 - Add phone number column to MA Licence Obtain tab 2026-07-30 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1218,7 +1218,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.85';
+        const DASHBOARD_VERSION = 'v3.86';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -3614,6 +3614,7 @@
             const lastNameIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
             const dobIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('date of birth'));
             const emailIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
+            const phoneIdx = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
             const licenceIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
             const fitProperIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('fit and proper person'));
             const crashtagIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('crashtag consent'));
@@ -3655,10 +3656,11 @@
             document.getElementById('maTable').style.display = 'table';
             const headRow = document.getElementById('maHead');
             headRow.innerHTML = '';
-            // Create headers: Entry #, Name, DOB, Address columns, Fit & Proper, Crashtag Consent, then Medical columns
+            // Create headers: Entry #, Name, Phone, Email, DOB, Address columns, Fit & Proper, Crashtag Consent, then Medical columns
             const headers = [
                 'Entry #',
                 'Name',
+                'Phone',
                 'Email',
                 'Date of Birth',
                 ...addressIdxs.map((_, i) => `Address ${i + 1}`),
@@ -3696,7 +3698,8 @@
                 const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                 const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                 const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
-                const searchableText = [entryId, firstName, lastName, email].join(' ').toLowerCase();
+                const phone = phoneIdx >= 0 ? row[phoneIdx] || '' : '';
+                const searchableText = [entryId, firstName, lastName, email, phone].join(' ').toLowerCase();
                 if (!searchableText.includes(searchTerm)) {
                     return;
                 }
@@ -3710,6 +3713,10 @@
                 const tdName = document.createElement('td');
                 tdName.textContent = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
                 tr.appendChild(tdName);
+                // Phone
+                const tdPhone = document.createElement('td');
+                tdPhone.textContent = phoneIdx >= 0 ? row[phoneIdx] || '' : '';
+                tr.appendChild(tdPhone);
                 // Email
                 const tdEmail = document.createElement('td');
                 tdEmail.textContent = emailIdx >= 0 ? row[emailIdx] || '' : '';
