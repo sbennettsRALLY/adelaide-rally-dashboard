@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.87 - MA Licence Checks: remove PDF verification, add manual inputs + phone/email 2026-08-02 -->
+<!-- Adelaide Rally 2026 Dashboard v3.88 - Fix MA Licence Checks untick not persisting through Dropbox sync 2026-08-02 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1210,7 +1210,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.87';
+        const DASHBOARD_VERSION = 'v3.88';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -2692,7 +2692,8 @@
                 cbOk.checked = maLicenceChecked[entryId] || false;
                 cbOk.title = 'Tick when licence has been manually verified';
                 cbOk.addEventListener('click', (e) => {
-                    if (e.target.checked) { maLicenceChecked[entryId] = true; } else { delete maLicenceChecked[entryId]; }
+                    // Store false explicitly (not delete) so Dropbox sync respects the untick
+                    maLicenceChecked[entryId] = e.target.checked ? true : false;
                     saveToStorage();
                     updateDocStats();
                     filterDocuments();
@@ -4795,18 +4796,21 @@
                         const remLC = remoteState.maLicenceChecked || {};
                         const merged = { ...maLicenceChecked }; // start with local
                         Object.entries(remLC).forEach(([k, v]) => {
-                            if (v === true) {
-                                merged[k] = true; // remote true always wins
-                            } else if (!merged[k]) {
-                                merged[k] = v; // remote false only when local has nothing
+                            if (v === true && merged[k] !== false) {
+                                // Remote true wins, UNLESS local has explicitly set false (intentional untick).
+                                // local false = deliberate untick by this user, which must be respected.
+                                merged[k] = true;
+                            } else if (v === false && merged[k] === undefined) {
+                                merged[k] = false; // remote false propagates to users with no local state
                             }
+                            // remote true + local false → local false survives (intentional untick)
                             // remote false + local true → local true survives
                         });
-                        // Local is ahead if any local true is not yet reflected as true in remote.
-                        // Checks both missing keys AND keys present-but-false in remote — the previous
-                        // bug only checked missing keys, so when remote had all keys as false (corrupt
-                        // push), local trues were never pushed back to Dropbox.
-                        if (Object.keys(maLicenceChecked).some(k => maLicenceChecked[k] === true && remLC[k] !== true)) {
+                        // Local is ahead if any local true not yet in remote, OR local false where remote has true
+                        if (Object.keys(maLicenceChecked).some(k =>
+                            (maLicenceChecked[k] === true  && remLC[k] !== true) ||
+                            (maLicenceChecked[k] === false && remLC[k] === true)
+                        )) {
                             localAhead = true;
                         }
                         if (JSON.stringify(merged) !== JSON.stringify(maLicenceChecked)) {
