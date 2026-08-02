@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.86 - Add phone number column to MA Licence Obtain tab 2026-07-30 -->
+<!-- Adelaide Rally 2026 Dashboard v3.87 - MA Licence Checks: remove PDF verification, add manual inputs + phone/email 2026-08-02 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -809,12 +809,6 @@
                 <input type="text" id="maChecksSearch" class="fins" placeholder="Search by name, entry #, licence number..." />
             </div>
             <div class="filters" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
-                <input type="file" id="maVerificationPDF" accept=".pdf" style="display:none;" onchange="handleVerificationPDFUpload(event)" />
-                <button class="btn-reset" onclick="document.getElementById('maVerificationPDF').click()">📋 Upload MA Verification Report</button>
-                <button class="btn-reset" id="maVerifyClearBtn" onclick="clearMAVerification()" style="display:none;background:#dc2626;">✕ Clear Verification</button>
-                <span id="maVerifyStatus" style="font-size:12px;color:var(--muted);"></span>
-            </div>
-            <div class="filters" style="margin-top:8px;gap:8px;flex-wrap:wrap;align-items:center;">
                 <select id="maChecksFilterType" class="fins" style="flex:0 0 auto;width:auto;min-width:120px;" onchange="renderMALicenceChecks()">
                     <option value="">All Types</option>
                 </select>
@@ -845,10 +839,6 @@
                     <div class="num" id="maChecksExpired">0</div>
                     <div class="lbl">Expired / Missing Expiry</div>
                 </div>
-                <div class="stat-chip no-click" style="background: #E8F5E9;">
-                    <div class="num" id="maChecksVerified">0</div>
-                    <div class="lbl">MA Report Matched</div>
-                </div>
                 <div class="stat-chip no-click" style="background: #DBEAFE;">
                     <div class="num" id="maChecksLicenceOk">0</div>
                     <div class="lbl">Licence Ok</div>
@@ -860,6 +850,8 @@
                         <tr id="maChecksHead">
                             <th>Entry #</th>
                             <th>Name</th>
+                            <th>Phone</th>
+                            <th>Email</th>
                             <th>Type</th>
                             <th>Category</th>
                             <th>Licence #</th>
@@ -1218,7 +1210,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.86';
+        const DASHBOARD_VERSION = 'v3.87';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1226,9 +1218,10 @@
         let disclaimerChecked = {}; // Track which entries have disclaimer checked (auto or manual)
         let disclaimerLocked = {}; // Track which entries are locked (found via Dropbox verification)
         let withdrawn = new Set(); // Track withdrawn entrant indices
-        let maLicenceVerification = {}; // {[licNum]: {section, name, licences, best}} — from MA Verification Report PDF
-        let maLicenceChecked = {};      // {[entryId]: true/false} — manual or auto MA Licence checkbox on dashboard
+        let maLicenceVerification = {}; // kept for Dropbox backward-compat reads; no longer populated from UI
+        let maLicenceChecked = {};      // {[entryId]: true/false} — manual Licence Ok checkbox on dashboard
         let maExpiryOverride = {};      // {[entryId]: 'dd/mm/yyyy'} — manually entered expiry dates on MA Checks tab
+        let maLicenceTypeManual = {};   // {[entryId]: string} — manually entered MA Licence Type on MA Checks tab
         let navigationMarryEntries = []; // Legacy field — kept for Dropbox backward compat but not used by UI
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
@@ -1477,6 +1470,7 @@
                     maLicenceVerification = data.maLicenceVerification || {};
                     maLicenceChecked = data.maLicenceChecked || {};
                     maExpiryOverride = data.maExpiryOverride || {};
+                    maLicenceTypeManual = data.maLicenceTypeManual || {};
                     if (csvData.length > 0) {
                         document.getElementById('navBar').style.display = 'flex';
                         console.log('✓ Loaded embedded data with ' + csvData.length + ' entries');
@@ -2509,18 +2503,11 @@
             const noData = document.getElementById('maChecksNoData');
             const table = document.getElementById('maChecksTable');
             tbody.innerHTML = '';
-            const hasVerif = Object.keys(maLicenceVerification).length > 0;
-
-            // Show / hide the Clear Verification button and status text
-            const clearBtn = document.getElementById('maVerifyClearBtn');
-            const verifStatus = document.getElementById('maVerifyStatus');
-            if (clearBtn) clearBtn.style.display = hasVerif ? '' : 'none';
-            if (verifStatus && !hasVerif) verifStatus.textContent = '';
 
             if (csvData.length === 0) {
                 noData.style.display = 'block';
                 table.style.display = 'none';
-                ['maChecksTotal','maChecksExpired','maChecksVerified','maChecksLicenceOk'].forEach(id => {
+                ['maChecksTotal','maChecksExpired','maChecksLicenceOk'].forEach(id => {
                     document.getElementById(id).textContent = '0';
                 });
                 return;
@@ -2532,6 +2519,8 @@
             const entryIdIdx       = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
             const firstNameIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
             const lastNameIdx      = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const phoneIdx         = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+            const emailIdx         = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
             const mainTypeIdx      = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
             const licenceHoldsIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
             const licenceNumIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
@@ -2542,7 +2531,7 @@
                 .filter(i => i >= 0);
 
             // Licence must be valid through the last day of the event (18 Oct 2026)
-            const today = new Date(2026, 9, 18); // October 18 2026 (month is 0-indexed)
+            const today = new Date(2026, 9, 18);
             const searchTerm = document.getElementById('maChecksSearch').value.toLowerCase();
 
             // Sort by entry number ascending
@@ -2567,63 +2556,17 @@
                 const firstName   = firstNameIdx >= 0  ? (row[firstNameIdx] || '').trim()  : '';
                 const lastName    = lastNameIdx >= 0   ? (row[lastNameIdx] || '').trim()   : '';
                 const fullName    = [firstName, lastName].filter(Boolean).join(' ') || entryId;
+                const phone       = phoneIdx >= 0  ? (row[phoneIdx] || '').trim()  : '';
+                const email       = emailIdx >= 0  ? (row[emailIdx] || '').trim()  : '';
                 const entrantType = mainTypeIdx >= 0   ? (row[mainTypeIdx] || '').trim()   : '';
                 const category    = getCategory(row, categoryIdxs);
                 const csvType     = licenceTypeIdx >= 0   ? (row[licenceTypeIdx] || '').trim()   : '';
                 const csvExpiry   = licenceExpiryIdx >= 0 ? (row[licenceExpiryIdx] || '').trim() : '';
-                const verData     = licenceNum ? maLicenceVerification[licenceNum] : null;
 
-                let displayExpiry = maExpiryOverride[entryId] || csvExpiry;
-                let expiryFromPDF = false;
-                let maStatus      = '';
-                let statusActive  = false;
-
-                if (verData) {
-                    const sec = verData.section;
-                    if (sec === 'matchNotFound') {
-                        maStatus = '✗ Not Found';
-                    } else if (sec === 'noMembershipData') {
-                        maStatus = '✗ No Data';
-                    } else {
-                        const best = verData.best;
-                        if (best) {
-                            // Auto-fill expiry from PDF if no manual override exists
-                            if (best.expiry && !maExpiryOverride[entryId]) {
-                                displayExpiry = best.expiry;
-                                expiryFromPDF = true;
-                            }
-                            // Valid = BOTH active status AND a current (future) expiry date
-                            const bestIsActive = (best.status || '').toLowerCase() === 'active';
-                            let bestExpValid = false;
-                            if (best.expiry) {
-                                const bParts = best.expiry.split(/[\/\-\.]/);
-                                if (bParts.length === 3) {
-                                    const bExp = bParts[0].length === 4
-                                        ? new Date(parseInt(bParts[0]), parseInt(bParts[1]) - 1, parseInt(bParts[2]))
-                                        : new Date(parseInt(bParts[2]), parseInt(bParts[1]) - 1, parseInt(bParts[0]));
-                                    bestExpValid = bExp && !isNaN(bExp) && bExp >= today;
-                                }
-                            }
-                            statusActive = bestIsActive && bestExpValid;
-                            if (statusActive && sec === 'validMembership') maStatus = '✓ Valid';
-                            else if (sec === 'reviewMembership')           maStatus = statusActive ? '⚠ Review' : '✗ Expired';
-                            else                                           maStatus = '✗ Expired';
-                        } else if (verData.hasRelevantLicence === false) {
-                            // Person has licences but none are rally-relevant (wrong type for this event)
-                            maStatus = '✗ Wrong Licence Type';
-                            statusActive = false;
-                        } else {
-                            // Found in report but no licence rows could be parsed from the PDF
-                            statusActive = (sec !== 'reviewMembership');
-                            maStatus = sec === 'reviewMembership' ? '⚠ Review — no lic. data' : '✓ Valid — no lic. data';
-                        }
-                    }
-                }
+                const displayExpiry = maExpiryOverride[entryId] || csvExpiry;
 
                 let isExpired = false;
-                if (verData) {
-                    isExpired = !statusActive || verData.section === 'matchNotFound' || verData.section === 'noMembershipData';
-                } else if (!displayExpiry) {
+                if (!displayExpiry) {
                     isExpired = true;
                 } else {
                     const parts = displayExpiry.split(/[\/\-\.]/);
@@ -2637,8 +2580,8 @@
                     }
                 }
 
-                allEntries.push({ entryId, fullName, entrantType, category, licenceNum, csvType,
-                                  displayExpiry, expiryFromPDF, maStatus, statusActive, isExpired, verData });
+                allEntries.push({ entryId, fullName, phone, email, entrantType, category,
+                                  licenceNum, csvType, displayExpiry, isExpired });
             });
 
             // ── Populate dynamic filter dropdowns (preserve current selection) ──────
@@ -2655,9 +2598,9 @@
                 });
                 if (unique.includes(cur)) sel.value = cur;
             };
-            populateSelect('maChecksFilterType',        'All Types',         allEntries.map(e => e.entrantType));
-            populateSelect('maChecksFilterCategory',    'All Categories',    allEntries.map(e => e.category));
-            populateSelect('maChecksFilterLicenceType', 'All Entry Licence Types', allEntries.map(e => e.csvType));
+            populateSelect('maChecksFilterType',        'All Types',               allEntries.map(e => e.entrantType));
+            populateSelect('maChecksFilterCategory',    'All Categories',           allEntries.map(e => e.category));
+            populateSelect('maChecksFilterLicenceType', 'All Entry Licence Types',  allEntries.map(e => e.csvType));
 
             // ── Read active filter values ─────────────────────────────────────────
             const fType    = (document.getElementById('maChecksFilterType')        || {}).value || '';
@@ -2667,29 +2610,28 @@
             const fExpiry  = (document.getElementById('maChecksFilterExpiry')      || {}).value || 'all';
 
             // ── PASS 2: tally stats + apply filters + render rows ─────────────────
-            let total = 0, expired = 0, matched = 0, licenceOkCount = 0;
+            let total = 0, expired = 0, licenceOkCount = 0;
 
             allEntries.forEach(entry => {
-                const { entryId, fullName, entrantType, category, licenceNum,
-                        csvType, displayExpiry, expiryFromPDF, maStatus, isExpired, verData } = entry;
+                const { entryId, fullName, phone, email, entrantType, category,
+                        licenceNum, csvType, displayExpiry, isExpired } = entry;
 
                 // Always count stats for every qualifying entry (not filtered)
                 total++;
-                if (isExpired)               expired++;
-                if (verData)                 matched++;
+                if (isExpired)                 expired++;
                 if (maLicenceChecked[entryId]) licenceOkCount++;
 
                 // Apply UI filters
-                if (fType    && entrantType  !== fType)    return;
-                if (fCat     && category     !== fCat)     return;
-                if (fLicType && csvType      !== fLicType) return;
+                if (fType    && entrantType !== fType)    return;
+                if (fCat     && category    !== fCat)     return;
+                if (fLicType && csvType     !== fLicType) return;
                 if (fOk === 'ok'    && !maLicenceChecked[entryId]) return;
                 if (fOk === 'notok' &&  maLicenceChecked[entryId]) return;
                 if (fExpiry === 'valid'   &&  isExpired) return;
                 if (fExpiry === 'expired' && !isExpired) return;
 
                 // Search filter
-                const searchable = [entryId, fullName, licenceNum, csvType, maStatus].join(' ').toLowerCase();
+                const searchable = [entryId, fullName, phone, email, licenceNum, csvType].join(' ').toLowerCase();
                 if (searchTerm && !searchable.includes(searchTerm)) return;
 
                 // ── Build row ──────────────────────────────────────────────────────
@@ -2699,24 +2641,22 @@
                     tr.style.color = '#991B1B';
                 }
 
-                // Columns 0–5 (Entry Licence = csvType from entry form)
-                [entryId, fullName, entrantType, category, licenceNum, csvType].forEach(val => {
+                // Entry #, Name, Phone, Email, Type, Category, Licence #, Entry Licence
+                [entryId, fullName, phone, email, entrantType, category, licenceNum, csvType].forEach(val => {
                     const td = document.createElement('td');
                     td.textContent = val;
                     td.style.padding = '8px';
                     tr.appendChild(td);
                 });
 
-                // Column 6: Expiry — auto-filled from MA Report PDF when available, always editable
+                // Expiry — manual text input, saved to maExpiryOverride
                 const tdExpiry = document.createElement('td');
                 tdExpiry.style.padding = '4px 8px';
                 const inp = document.createElement('input');
                 inp.type = 'text';
                 inp.value = displayExpiry || '';
                 inp.placeholder = 'dd/mm/yyyy';
-                inp.title = expiryFromPDF
-                    ? 'Auto-filled from MA Report — edit to override'
-                    : 'Enter expiry date manually';
+                inp.title = 'Enter expiry date manually';
                 inp.style.cssText = 'width:90px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:' + (isExpired ? '#FEF2F2' : '#fff') + ';';
                 inp.addEventListener('change', (e) => {
                     const v = e.target.value.trim();
@@ -2725,44 +2665,32 @@
                     renderMALicenceChecks();
                 });
                 tdExpiry.appendChild(inp);
-                if (expiryFromPDF) {
-                    const hint = document.createElement('div');
-                    hint.style.cssText = 'font-size:9px;color:#6b7280;font-style:italic;margin-top:1px;';
-                    hint.textContent = '📋 from report';
-                    tdExpiry.appendChild(hint);
-                }
                 tr.appendChild(tdExpiry);
 
-                // Column 7: MA Licence Type (read-only, from uploaded MA Report PDF)
-                const tdVerifType = document.createElement('td');
-                tdVerifType.style.padding = '6px 8px';
-                if (verData && verData.best) {
-                    const b = verData.best;
-                    const bActive = (b.status || '').toLowerCase() === 'active';
-                    const typeCol = bActive ? '#15803D' : '#991B1B';
-                    tdVerifType.innerHTML = `<span style="font-size:12px;font-weight:600;color:${typeCol}">${b.type || '—'}</span>`;
-                } else if (verData) {
-                    // No best licence — show status text with colour matching meaning
-                    const typeCol = maStatus.startsWith('✓') ? '#15803D'
-                                  : maStatus.startsWith('⚠') ? '#B45309'
-                                  : '#6B7280';
-                    tdVerifType.innerHTML = `<span style="font-size:11px;color:${typeCol}">${maStatus}</span>`;
-                } else {
-                    tdVerifType.innerHTML = '<span style="color:#9CA3AF;font-size:12px;">—</span>';
-                }
-                tr.appendChild(tdVerifType);
+                // MA Licence Type — manual text input, saved to maLicenceTypeManual
+                const tdLicType = document.createElement('td');
+                tdLicType.style.padding = '4px 8px';
+                const licTypeInp = document.createElement('input');
+                licTypeInp.type = 'text';
+                licTypeInp.value = maLicenceTypeManual[entryId] || '';
+                licTypeInp.placeholder = 'e.g. Rally, Speed…';
+                licTypeInp.title = 'Enter MA Licence Type manually';
+                licTypeInp.style.cssText = 'width:130px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:#fff;';
+                licTypeInp.addEventListener('change', (e) => {
+                    const v = e.target.value.trim();
+                    if (v) maLicenceTypeManual[entryId] = v; else delete maLicenceTypeManual[entryId];
+                    saveToStorage();
+                });
+                tdLicType.appendChild(licTypeInp);
+                tr.appendChild(tdLicType);
 
-                // Column 7: Licence Ok checkbox (shares maLicenceChecked with dashboard)
+                // Licence Ok checkbox — fully manual
                 const tdOk = document.createElement('td');
                 tdOk.className = 'checkbox-col';
                 const cbOk = document.createElement('input');
                 cbOk.type = 'checkbox';
                 cbOk.checked = maLicenceChecked[entryId] || false;
-                const isLocked = !!(maLicenceChecked[entryId + '_locked']);
-                cbOk.disabled = isLocked;
-                cbOk.title = isLocked
-                    ? 'Auto-verified via MA Report — ' + maStatus
-                    : (maStatus ? 'MA Report: ' + maStatus + ' — manual override' : 'Manual check — tick when verified');
+                cbOk.title = 'Tick when licence has been manually verified';
                 cbOk.addEventListener('click', (e) => {
                     if (e.target.checked) { maLicenceChecked[entryId] = true; } else { delete maLicenceChecked[entryId]; }
                     saveToStorage();
@@ -2777,7 +2705,6 @@
 
             document.getElementById('maChecksTotal').textContent = total;
             document.getElementById('maChecksExpired').textContent = expired;
-            document.getElementById('maChecksVerified').textContent = matched;
             document.getElementById('maChecksLicenceOk').textContent = licenceOkCount;
         }
 
@@ -2794,35 +2721,10 @@
             renderMALicenceChecks();
         }
 
-        // ─── MA Licence Verification — PDF upload & parse ────────────────────────
-        async function handleVerificationPDFUpload(event) {
-            const file = event.target.files[0];
-            event.target.value = ''; // reset so the same file can be re-uploaded
-            if (!file) return;
-            showMessage('maChecksMsg', 'ok', '⏳ Parsing MA Verification Report…');
-            try {
-                await parseAndApplyVerificationPDF(file);
-            } catch (e) {
-                console.error('MA PDF parse error:', e);
-                showMessage('maChecksMsg', 'error', '❌ Failed to parse PDF: ' + e.message);
-            }
-        }
 
-        function clearMAVerification() {
-            if (!confirm('Clear all MA verification data from the uploaded report?')) return;
-            maLicenceVerification = {};
-            // Remove all auto-lock flags set by the PDF upload (manual ticks remain)
-            Object.keys(maLicenceChecked).forEach(k => {
-                if (k.endsWith('_locked')) delete maLicenceChecked[k];
-            });
-            saveToStorage();
-            renderMALicenceChecks();
-            if (currentView === 'doc-chase') renderDocTable();
-            showMessage('maChecksMsg', 'ok', '✓ Verification data cleared. Manual Licence Ok ticks are preserved.');
-        }
-
-        async function parseAndApplyVerificationPDF(file) {
-            // PDF.js is loaded via CDN; its global is window['pdfjs-dist/build/pdf']
+        // ─── REMOVED: parseAndApplyVerificationPDF, _maVerifParseLines, _maVerifDedupeType, _maVerifBestLicence ───
+        // MA verification PDF upload removed — all licence data is now entered manually.
+        function _REMOVED_parseAndApplyVerificationPDF(file) {
             const pdfjsLib = window['pdfjs-dist/build/pdf'];
             if (!pdfjsLib) throw new Error('PDF library (pdf.js) not loaded — check internet connection.');
 
@@ -3875,6 +3777,7 @@
                         maLicenceVerification = data.maLicenceVerification || {};
                         maLicenceChecked = data.maLicenceChecked || {};
                         maExpiryOverride = data.maExpiryOverride || {};
+                        maLicenceTypeManual = data.maLicenceTypeManual || {};
                         saveToStorage();
                         // Update UI
                         if (csvData.length > 0) {
@@ -3986,6 +3889,7 @@
                 maLicenceVerification,
                 maLicenceChecked,
                 maExpiryOverride,
+                maLicenceTypeManual,
                 stateTimestamps: {
                     carNumbers: carNumberTimestamp,
                     customCarSlots: customCarSlotsTimestamp,
@@ -4029,6 +3933,7 @@
                     maLicenceVerification = data.maLicenceVerification || {};
                     maLicenceChecked = data.maLicenceChecked || {};
                     maExpiryOverride = data.maExpiryOverride || {};
+                    maLicenceTypeManual = data.maLicenceTypeManual || {};
                     const _ts = data.stateTimestamps || {};
                     carNumberTimestamp = _ts.carNumbers || 0;
                     customCarSlotsTimestamp = _ts.customCarSlots || 0;
@@ -4374,6 +4279,7 @@
                 maLicenceVerification = remoteState.maLicenceVerification || {};
                 maLicenceChecked     = remoteState.maLicenceChecked || {}; // preserve false values (unticks)
                 maExpiryOverride     = remoteState.maExpiryOverride || {};
+                maLicenceTypeManual  = remoteState.maLicenceTypeManual || {};
                 // Restore timestamps from remote state
                 const _fts = remoteState.stateTimestamps || {};
                 carNumberTimestamp        = _fts.carNumbers       || 0;
@@ -4387,7 +4293,7 @@
                     withdrawn: Array.from(withdrawn), withdrawnAt, restoredAt,
                     navigationMarryEntries,
                     carNumberAssignments, customCarSlots, manualNavMatches,
-                    maLicenceVerification, maLicenceChecked, maExpiryOverride,
+                    maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                     stateTimestamps: {
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
@@ -4926,13 +4832,24 @@
 
                     // Merge maExpiryOverride: union, local wins on conflict
                     if (remoteState.maExpiryOverride && typeof remoteState.maExpiryOverride === 'object') {
-                        // If local has entries Dropbox doesn't, push-back is needed
                         if (Object.keys(maExpiryOverride).some(k => !(k in remoteState.maExpiryOverride))) {
                             localAhead = true;
                         }
                         const merged = { ...remoteState.maExpiryOverride, ...maExpiryOverride };
                         if (JSON.stringify(merged) !== JSON.stringify(maExpiryOverride)) {
                             maExpiryOverride = merged;
+                            stateUpdated = true;
+                        }
+                    }
+
+                    // Merge maLicenceTypeManual: union, local wins on conflict
+                    if (remoteState.maLicenceTypeManual && typeof remoteState.maLicenceTypeManual === 'object') {
+                        if (Object.keys(maLicenceTypeManual).some(k => !(k in remoteState.maLicenceTypeManual))) {
+                            localAhead = true;
+                        }
+                        const merged = { ...remoteState.maLicenceTypeManual, ...maLicenceTypeManual };
+                        if (JSON.stringify(merged) !== JSON.stringify(maLicenceTypeManual)) {
+                            maLicenceTypeManual = merged;
                             stateUpdated = true;
                         }
                     }
@@ -4948,7 +4865,7 @@
                             withdrawn: Array.from(withdrawn), withdrawnAt, restoredAt,
                             navigationMarryEntries, carNumberAssignments,
                             customCarSlots, manualNavMatches,
-                            maLicenceVerification, maLicenceChecked, maExpiryOverride,
+                            maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                             stateTimestamps: {
                                 carNumbers: carNumberTimestamp,
                                 customCarSlots: customCarSlotsTimestamp,
@@ -5021,6 +4938,7 @@
                 maLicenceVerification = data.maLicenceVerification || {};
                 maLicenceChecked = data.maLicenceChecked || {};
                 maExpiryOverride = data.maExpiryOverride || {};
+                maLicenceTypeManual = data.maLicenceTypeManual || {};
                 lastSyncTimestamp = data.timestamp || 0;
                 console.log('✓ Loaded state from Dropbox');
                 if (csvData.length > 0) {
@@ -5930,42 +5848,29 @@
                     const licNumIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
                     const licTypeIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence type'));
                     const licExpiryIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence expiry'));
-                    const maChecksData  = [['Entry #', 'Name', 'Type', 'Category', 'Licence #', 'Entry Licence', 'Expiry', 'MA Verified Licence', 'MA Verified Expiry', 'MA Status', 'Licence OK']];
+                    const maChkPhoneIdx = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+                    const maChkEmailIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
+                    const maChecksData  = [['Entry #', 'Name', 'Phone', 'Email', 'Type', 'Category', 'Licence #', 'Entry Licence', 'Expiry', 'MA Licence Type', 'Licence OK']];
                     sortedIndices.forEach(idx => {
                         const row = csvData[idx];
                         const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
                         if (!entryId || withdrawn.has(entryId)) return;
-                        // Include if answered "Yes" OR if they provided a licence number
                         const licNum   = licNumIdx  >= 0 ? (row[licNumIdx]  || '').trim() : '';
                         const holds    = licHoldsIdx >= 0 ? (row[licHoldsIdx] || '').trim() : '';
                         if (!holds.toLowerCase().startsWith('yes') && !licNum) return;
                         const firstName  = firstNameIdx >= 0 ? (row[firstNameIdx] || '').trim() : '';
                         const lastName   = lastNameIdx  >= 0 ? (row[lastNameIdx]  || '').trim() : '';
                         const name       = [firstName, lastName].filter(Boolean).join(' ');
+                        const phone      = maChkPhoneIdx >= 0 ? (row[maChkPhoneIdx] || '').trim() : '';
+                        const email      = maChkEmailIdx >= 0 ? (row[maChkEmailIdx] || '').trim() : '';
                         const entryType  = entryTypeIdx >= 0 ? (row[entryTypeIdx] || '').trim() : '';
                         const category   = getCategory(row, categoryIdxs);
                         const licType    = licTypeIdx   >= 0 ? (row[licTypeIdx]   || '').trim() : '';
                         const licExpiry  = licExpiryIdx >= 0 ? (row[licExpiryIdx] || '').trim() : '';
-                        // Look up MA verification status
-                        const verData   = licNum ? maLicenceVerification[licNum] : null;
-                        let maStatus = '';
-                        let maVerifType = '', maVerifExpiry = '';
-                        if (verData) {
-                            const sec = verData.section;
-                            if (sec === 'matchNotFound') { maStatus = 'Not Found'; }
-                            else if (sec === 'noMembershipData') { maStatus = 'No Data'; }
-                            else if (verData.best) {
-                                maVerifType   = verData.best.type || '';
-                                maVerifExpiry = verData.best.expiry || '';
-                                const active = (verData.best.status || '').toLowerCase() === 'active';
-                                maStatus = active ? (sec === 'validMembership' ? 'Valid' : 'Review') : 'Expired';
-                            } else if (verData.hasRelevantLicence === false) {
-                                maStatus = 'Wrong Licence Type';
-                            }
-                        }
-                        const entryExpiry = (maExpiryOverride[entryId] || licExpiry);
-                        const licenceOk = maLicenceChecked[entryId] ? '✓' : '';
-                        maChecksData.push([entryId, name, entryType, category, licNum, licType, entryExpiry, maVerifType, maVerifExpiry, maStatus, licenceOk]);
+                        const entryExpiry    = maExpiryOverride[entryId] || licExpiry;
+                        const maLicType  = maLicenceTypeManual[entryId] || '';
+                        const licenceOk  = maLicenceChecked[entryId] ? '✓' : '';
+                        maChecksData.push([entryId, name, phone, email, entryType, category, licNum, licType, entryExpiry, maLicType, licenceOk]);
                     });
                     const maChecksWs = XLSX.utils.aoa_to_sheet(maChecksData);
                     XLSX.utils.book_append_sheet(wb, maChecksWs, 'MA Licence Checks');
