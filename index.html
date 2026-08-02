@@ -2722,9 +2722,8 @@
         }
 
 
-        // ─── REMOVED: parseAndApplyVerificationPDF, _maVerifParseLines, _maVerifDedupeType, _maVerifBestLicence ───
-        // MA verification PDF upload removed — all licence data is now entered manually.
-        function _REMOVED_parseAndApplyVerificationPDF(file) {
+        // ─── MA verification PDF functions removed in v3.87 — all licence data is now entered manually ───
+        async function _REMOVED_parseAndApplyVerificationPDF(file) {
             const pdfjsLib = window['pdfjs-dist/build/pdf'];
             if (!pdfjsLib) throw new Error('PDF library (pdf.js) not loaded — check internet connection.');
 
