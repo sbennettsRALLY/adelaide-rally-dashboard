@@ -5553,7 +5553,8 @@
                     }
                 });
                 medicalIdxs.sort((a, b) => a.order - b.order);
-                const maLicenceData = [['Entry #', 'Name', 'Email', 'DOB', ...addressIdxs.map((_, i) => `Address ${i + 1}`), 'Fit & Proper', 'Crashtag Consent', ...medicalIdxs.map(m => m.condensed)]];
+                const maPhoneIdx = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+                const maLicenceData = [['Entry #', 'Name', 'Phone', 'Email', 'DOB', ...addressIdxs.map((_, i) => `Address ${i + 1}`), 'Fit & Proper', 'Crashtag Consent', ...medicalIdxs.map(m => m.condensed)]];
                 sortedIndices.forEach(idx => {
                     const row = csvData[idx];
                     const entryId = entryIdIdx >= 0 ? row[entryIdIdx] || '' : '';
@@ -5563,11 +5564,12 @@
                     const firstName = firstNameIdx >= 0 ? row[firstNameIdx] || '' : '';
                     const lastName = lastNameIdx >= 0 ? row[lastNameIdx] || '' : '';
                     const name = firstName && lastName ? `${firstName} ${lastName}` : (firstName || lastName || '');
+                    const phone = maPhoneIdx >= 0 ? row[maPhoneIdx] || '' : '';
                     const email = emailIdx >= 0 ? row[emailIdx] || '' : '';
                     const dob = dobIdx >= 0 ? row[dobIdx] || '' : '';
                     const fitProper = fitProperIdx >= 0 ? row[fitProperIdx] || '' : '';
                     const crashtag = crashtagIdx >= 0 ? row[crashtagIdx] || '' : '';
-                    const rowData = [entryId, name, email, dob];
+                    const rowData = [entryId, name, phone, email, dob];
                     addressIdxs.forEach(addrIdx => rowData.push(row[addrIdx] || ''));
                     rowData.push(fitProper, crashtag);
                     medicalIdxs.forEach(medCol => rowData.push(row[medCol.index] || ''));
