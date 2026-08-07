@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.88 - Fix MA Licence Checks untick not persisting through Dropbox sync 2026-08-02 -->
+<!-- Adelaide Rally 2026 Dashboard v3.89 - Fix stale data on re-open: aggressive token refresh + stale-data banner 2026-08-07 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1210,7 +1210,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.88';
+        const DASHBOARD_VERSION = 'v3.89';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1500,7 +1500,7 @@
             // If a Dropbox token exists, show the loading overlay so the user sees Dropbox
             // data (not stale localStorage) on first render. initDropboxSync() hides the
             // overlay once the pull completes (or falls back to localStorage on failure).
-            const hasDropboxToken = !!localStorage.getItem('dropbox_access_token');
+            const hasDropboxToken = !!(localStorage.getItem('dropbox_access_token') || localStorage.getItem('dropbox_refresh_token'));
             if (hasDropboxToken) {
                 const overlay = document.getElementById('dropbox-loading-overlay');
                 if (overlay) overlay.style.display = 'flex';
@@ -4347,8 +4347,9 @@
             let token = localStorage.getItem('dropbox_access_token');
             const expiresAt = parseInt(localStorage.getItem('dropbox_token_expires_at') || 0);
 
-            // If token expires in less than 5 minutes, refresh it
-            if (expiresAt && Date.now() > expiresAt - 300000) {
+            // Refresh when: no token, expiry not stored (legacy sessions), or expiring within 5 min
+            const needsRefresh = !token || !expiresAt || Date.now() > expiresAt - 300000;
+            if (needsRefresh && localStorage.getItem('dropbox_refresh_token')) {
                 const refreshed = await refreshDropboxToken();
                 if (refreshed) {
                     token = localStorage.getItem('dropbox_access_token');
@@ -4357,17 +4358,39 @@
                 }
             }
 
-            return token;
+            return token || null;
         }
+        // Shows a dismissable orange banner at the top of the page when data may be stale
+        function _showStaleBanner(message) {
+            if (document.getElementById('stale-data-banner')) return; // Already shown
+            const banner = document.createElement('div');
+            banner.id = 'stale-data-banner';
+            banner.style.cssText = [
+                'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:9999',
+                'background:#e67e22', 'color:#fff', 'padding:10px 48px 10px 16px',
+                'font-size:14px', 'font-weight:600', 'line-height:1.4',
+                'box-shadow:0 2px 8px rgba(0,0,0,0.3)', 'cursor:default'
+            ].join(';');
+            banner.textContent = '⚠ ' + message;
+            const close = document.createElement('button');
+            close.textContent = '✕';
+            close.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:4px 8px;line-height:1;';
+            close.onclick = () => banner.remove();
+            banner.appendChild(close);
+            document.body.prepend(banner);
+        }
+
         async function initDropboxSync() {
             try {
                 const token = await getValidDropboxToken();
                 if (!token) {
-                    console.error('✗ No Dropbox token found - user must authenticate');
-                    updateDropboxStatus();
+                    console.error('✗ No Dropbox token — user must re-authenticate');
+                    updateDropboxStatus('Session expired — reconnect to see latest data');
                     // Hide loading overlay — fall back to localStorage data
                     const overlay = document.getElementById('dropbox-loading-overlay');
                     if (overlay) overlay.style.display = 'none';
+                    // Show a prominent stale-data banner
+                    _showStaleBanner('Dropbox session expired. Press "Reconnect Dropbox" to load the latest data from other users.');
                     if (csvData.length > 0) switchView('dashboard', false);
                     return;
                 }
@@ -4388,9 +4411,11 @@
                 console.log('✓ Dropbox REST API sync initialized');
                 // Initial pull — show overlay so users see Dropbox data, not stale localStorage
                 const localAheadOnInit = await syncFromDropbox();
-                // Hide loading overlay now that Dropbox data is loaded
+                // Hide loading overlay and any stale-data banner now that Dropbox data is loaded
                 const overlay = document.getElementById('dropbox-loading-overlay');
                 if (overlay) overlay.style.display = 'none';
+                const staleBanner = document.getElementById('stale-data-banner');
+                if (staleBanner) staleBanner.remove();
                 // If local had state Dropbox didn't, push it now so other users can see it
                 if (localAheadOnInit) {
                     console.log('ℹ Local had state not in Dropbox on init — pushing to sync others');
@@ -4417,6 +4442,7 @@
                 // Hide loading overlay on error — fall back to localStorage
                 const overlay = document.getElementById('dropbox-loading-overlay');
                 if (overlay) overlay.style.display = 'none';
+                _showStaleBanner('Could not connect to Dropbox on startup. Data shown may be out of date. Use "Force Sync" or reload to retry.');
                 if (csvData.length > 0) switchView('dashboard', false);
             }
         }
