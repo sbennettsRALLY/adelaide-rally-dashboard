@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.89 - Fix stale data on re-open: aggressive token refresh + stale-data banner 2026-08-07 -->
+<!-- Adelaide Rally 2026 Dashboard v3.90 - Fix CSV merge: remote wins if more rows OR newer timestamp 2026-08-07 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1210,7 +1210,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.89';
+        const DASHBOARD_VERSION = 'v3.90';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4583,26 +4583,34 @@
                         const localCount  = csvData.length;
                         const remoteTs    = remoteState.csvUploadTimestamp || 0;
                         const localTs     = csvUploadTimestamp || 0;
-                        // Remote wins if its upload was more recent (or local has no CSV at all).
-                        const remoteWins  = localCount === 0 || remoteTs > localTs;
+                        // Remote wins if: local is empty, OR remote has a newer upload timestamp,
+                        // OR remote has MORE rows than local (handles the case where another user
+                        // uploaded a newer CSV but local has an accidentally newer timestamp from
+                        // a re-upload of older data — more rows almost always means more entries).
+                        // Combining both conditions means a corrected smaller CSV still propagates
+                        // via the newer-timestamp path, while a larger remote always beats a
+                        // stale local regardless of timestamp.
+                        const remoteWins  = localCount === 0 || remoteTs > localTs || remoteCount > localCount;
                         if (localCount === 0 && remoteCount === 0) {
                             // Both empty — nothing to do
                         } else if (remoteWins) {
-                            // Remote CSV was uploaded more recently — replace local entirely
+                            const reason = remoteCount > localCount && remoteTs <= localTs
+                                ? 'remote has more entries (' + remoteCount + ' vs ' + localCount + ')'
+                                : 'remote upload is newer';
                             csvHeaders = remoteState.csvHeaders;
                             csvData    = remoteState.csvData;
                             csvUploadTimestamp = remoteTs;
                             hasChanges = true;
-                            console.log('✓ CSV replaced from Dropbox:', remoteCount, 'entries (local had', localCount,
-                                        '| remote ts:', remoteTs, 'local ts:', localTs, ')');
+                            console.log('✓ CSV replaced from Dropbox —', reason,
+                                        '| remote ts:', remoteTs, 'local ts:', localTs);
                         } else {
-                            // Local CSV was uploaded more recently — keep it exactly as-is.
+                            // Local CSV is newer AND has at least as many rows — keep it.
                             // The uploaded CSV is a complete export from the entry system and
                             // is the single source of truth for who is entered. Adding rows
                             // from Dropbox would re-introduce deleted entrants as ghost entries.
                             // Signal that local is ahead so the sync timer pushes to Dropbox.
                             localAhead = true;
-                            console.log('✓ Local CSV is newer — keeping local (' + csvData.length + ' entries), will push to Dropbox.');
+                            console.log('✓ Local CSV is newer and has equal/more entries — keeping local (' + csvData.length + ' entries), will push to Dropbox.');
                         }
                     }
 
