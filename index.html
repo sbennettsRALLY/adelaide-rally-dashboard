@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.90 - Fix CSV merge: remote wins if more rows OR newer timestamp 2026-08-07 -->
+<!-- Adelaide Rally 2026 Dashboard v3.91 - Add Unallocate All button on Car Numbers page 2026-08-27 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1004,6 +1004,7 @@
             <!-- Controls bar -->
             <div class="filters" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
                 <button class="btn-reset" onclick="cnAutoAssign()" title="Auto-assign all unassigned drivers to slots in their category">⚡ Auto-Assign</button>
+                <button class="btn-reset" onclick="cnUnallocateAll()" title="Remove all driver assignments from car number slots" style="background:#dc2626;">🗑 Unallocate All</button>
                 <button class="btn-reset" id="cnClearSwapBtn" onclick="cnCancelSwap()" style="display:none; background:#dc2626;">✕ Cancel Swap</button>
                 <select id="cnCatFilter" class="fsel" onchange="renderCarNumbers()">
                     <option value="">All Categories</option>
@@ -1210,7 +1211,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.90';
+        const DASHBOARD_VERSION = 'v3.91';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -6662,6 +6663,22 @@
             'Comp/Rally Pro':       'Competition/Rally Pro',
             'Solitaire':            'Solitaire',
         };
+
+        // ── Unallocate all ──────────────────────────────────────────────────
+        function cnUnallocateAll() {
+            const assignedCount = Object.values(carNumbers).filter(v => v).length;
+            if (assignedCount === 0) {
+                showMessage('cnMsg', 'info', 'ℹ No drivers are currently assigned to car numbers.');
+                return;
+            }
+            if (!confirm(`Remove all ${assignedCount} driver assignment(s) from car number slots?\n\nThe car number slots will remain — only the driver allocations will be cleared.`)) return;
+            for (const key in carNumbers) {
+                carNumbers[key] = null;
+            }
+            saveToStorage();
+            renderCarNumbers();
+            showMessage('cnMsg', 'success', `✓ All ${assignedCount} driver assignments cleared.`);
+        }
 
         // ── Auto-assign ─────────────────────────────────────────────────────
         function cnAutoAssign() {
