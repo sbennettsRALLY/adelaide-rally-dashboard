@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.91 - Add Unallocate All button on Car Numbers page 2026-08-27 -->
+<!-- Adelaide Rally 2026 Dashboard v3.92 - Fix Unallocate All: correct variable name and confirm dialog 2026-08-27 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1211,7 +1211,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.91';
+        const DASHBOARD_VERSION = 'v3.92';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -6666,18 +6666,17 @@
 
         // ── Unallocate all ──────────────────────────────────────────────────
         function cnUnallocateAll() {
-            const assignedCount = Object.values(carNumbers).filter(v => v).length;
+            const assignedCount = Object.values(carNumberAssignments).filter(v => v && v.entryId).length;
             if (assignedCount === 0) {
                 showMessage('cnMsg', 'info', 'ℹ No drivers are currently assigned to car numbers.');
                 return;
             }
-            if (!confirm(`Remove all ${assignedCount} driver assignment(s) from car number slots?\n\nThe car number slots will remain — only the driver allocations will be cleared.`)) return;
-            for (const key in carNumbers) {
-                carNumbers[key] = null;
-            }
+            if (!window.confirm('Remove all ' + assignedCount + ' driver assignment(s) from car number slots?\n\nThe car number slots will remain — only the driver allocations will be cleared.')) return;
+            carNumberAssignments = {};
+            carNumberTimestamp = Date.now();
             saveToStorage();
             renderCarNumbers();
-            showMessage('cnMsg', 'success', `✓ All ${assignedCount} driver assignments cleared.`);
+            showMessage('cnMsg', 'success', '✓ All ' + assignedCount + ' driver assignments cleared.');
         }
 
         // ── Auto-assign ─────────────────────────────────────────────────────
