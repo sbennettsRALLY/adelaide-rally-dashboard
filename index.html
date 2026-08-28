@@ -1263,7 +1263,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.01';
+        const DASHBOARD_VERSION = 'v4.02';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4425,6 +4425,8 @@
         let syncFailureCount = 0; // consecutive pull failures — used to show stale/error status
         const DROPBOX_SYNC_INTERVAL = 5000; // Auto-sync every 5 seconds
         const DROPBOX_STATE_FILE = '/Massive Events Corp Folders/Adelaide Rally 2026/03. Dashboard/AdelaideRallyState.json';
+        const DROPBOX_STATE_NS = '4171198097'; // Adelaide Rally shared folder namespace — forces all users to the same physical file
+        const DROPBOX_NS_HEADER = JSON.stringify({'.tag': 'namespace_id', 'namespace_id': DROPBOX_STATE_NS});
 
         // OAuth Helper Functions
         function generateCodeVerifier() {
@@ -4659,7 +4661,7 @@
                 if (!token) { alert('Not connected to Dropbox. Please reconnect first.'); return; }
                 const linkResponse = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', {
                     method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Dropbox-API-Path-Root': DROPBOX_NS_HEADER },
                     body: JSON.stringify({ path: DROPBOX_STATE_FILE })
                 });
                 if (!linkResponse.ok) {
@@ -4784,6 +4786,7 @@
                     headers: {
                         'Authorization': 'Bearer ' + token,
                         'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE, mode: 'overwrite' }),
+                        'Dropbox-API-Path-Root': DROPBOX_NS_HEADER,
                         'Content-Type': 'application/octet-stream'
                     },
                     body: JSON.stringify(state)
@@ -4799,7 +4802,7 @@
                 try {
                     const linkResp = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', {
                         method: 'POST',
-                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Dropbox-API-Path-Root': DROPBOX_NS_HEADER },
                         body: JSON.stringify({ path: DROPBOX_STATE_FILE })
                     });
                     if (linkResp.ok) {
@@ -4977,7 +4980,8 @@
                         method: 'POST',
                         headers: {
                             'Authorization': 'Bearer ' + token,
-                            'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE })
+                            'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE }),
+                            'Dropbox-API-Path-Root': DROPBOX_NS_HEADER
                         }
                     });
                     if (preCheckResp.ok) {
@@ -5087,6 +5091,7 @@
                             path: DROPBOX_STATE_FILE,
                             mode: 'overwrite'
                         }),
+                        'Dropbox-API-Path-Root': DROPBOX_NS_HEADER,
                         'Content-Type': 'application/octet-stream'
                     },
                     body: JSON.stringify(state)
@@ -5130,7 +5135,8 @@
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Dropbox-API-Path-Root': DROPBOX_NS_HEADER
                     },
                     body: JSON.stringify({ path: DROPBOX_STATE_FILE })
                 });
