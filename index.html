@@ -1264,7 +1264,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.96';
+        const DASHBOARD_VERSION = 'v3.97';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -2842,6 +2842,31 @@
                         if (obj.MemberNumber || obj.FirstName || obj.LastName) rows.push(obj);
                     }
                     if (rows.length === 0) { showMessage('autoMAMsg', 'error', '⚠️ No data rows found in verification report.'); return; }
+
+                    // Before replacing the verification data, lock in any entrants who are
+                    // currently computed as "Pass" so their status survives the new upload.
+                    // We set maAutoChecked[eid] = true for each passing entrant so that even
+                    // if the new report changes their result, the ✓ OK checkbox remains ticked.
+                    if (maVerificationData.length > 0 && csvData.length > 0) {
+                        const _eiIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                        const _mnIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+                        const _catIdxs= csvHeaders.map((h,i) => h.toLowerCase().includes('i am entering') ? i : -1).filter(i => i >= 0);
+                        const _dIdxs  = _catIdxs.filter(i => { const h=csvHeaders[i].toLowerCase(); return h.includes('as a driver')&&!h.includes('navigator/driver'); });
+                        const _nIdxs  = _catIdxs.filter(i => { const h=csvHeaders[i].toLowerCase(); return h.includes('as a navigator')&&!h.includes('driver/navigator'); });
+                        csvData.forEach(row => {
+                            const eid = _eiIdx >= 0 ? (row[_eiIdx]||'').trim() : '';
+                            if (!eid || withdrawn.has(eid) || maAutoChecked[eid] === true) return;
+                            const maNum = _mnIdx >= 0 ? (row[_mnIdx]||'').trim() : '';
+                            const cat   = getCategory(row, _catIdxs);
+                            const hasD  = _dIdxs.some(i => (row[i]||'').trim());
+                            const hasN  = _nIdxs.some(i => (row[i]||'').trim());
+                            const role  = (!hasD && hasN) ? 'Navigator' : 'Driver';
+                            if (_getAutoMAResult(maNum, role, cat).status === 'pass') {
+                                maAutoChecked[eid] = true;
+                            }
+                        });
+                    }
+
                     maVerificationData    = rows;
                     maVerificationTimestamp = Date.now();
                     saveToStorage();
