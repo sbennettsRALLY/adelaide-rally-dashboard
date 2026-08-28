@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.92 - Fix Unallocate All: correct variable name and confirm dialog 2026-08-27 -->
+<!-- Adelaide Rally 2026 Dashboard v3.93 - Fix maLicenceTypeManual missing from Dropbox push; guard MA Checks re-render while input focused 2026-08-28 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1211,7 +1211,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.92';
+        const DASHBOARD_VERSION = 'v3.93';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -2677,7 +2677,7 @@
                 licTypeInp.placeholder = 'e.g. Rally, Speed…';
                 licTypeInp.title = 'Enter MA Licence Type manually';
                 licTypeInp.style.cssText = 'width:130px;padding:3px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;background:#fff;';
-                licTypeInp.addEventListener('change', (e) => {
+                licTypeInp.addEventListener('input', (e) => {
                     const v = e.target.value.trim();
                     if (v) maLicenceTypeManual[entryId] = v; else delete maLicenceTypeManual[entryId];
                     saveToStorage();
@@ -4477,6 +4477,7 @@
                     maLicenceVerification: maLicenceVerification,
                     maLicenceChecked: maLicenceChecked, // keep false values so unticks propagate via Dropbox
                     maExpiryOverride: maExpiryOverride,
+                    maLicenceTypeManual: maLicenceTypeManual,
                     stateTimestamps: {
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
@@ -4930,11 +4931,18 @@
                     // The next 5-second sync cycle will pick up any changes after they finish.
                     if (csvData.length > 0) {
                         const _activeEl = document.activeElement;
-                        const _cnView   = document.getElementById('car-numbers');
-                        const _dropdownOpen = currentView === 'car-numbers' &&
-                            _activeEl && _activeEl.tagName === 'SELECT' &&
-                            _cnView && _cnView.contains(_activeEl);
-                        if (!_dropdownOpen) {
+                        // Skip re-render if user has a SELECT open in car-numbers (destroys dropdown)
+                        // or a text/date INPUT focused in ma-licence-checks (would lose unsaved typing)
+                        const _cnView  = document.getElementById('car-numbers');
+                        const _maView  = document.getElementById('ma-licence-checks');
+                        const _skipRender =
+                            (currentView === 'car-numbers' &&
+                                _activeEl && _activeEl.tagName === 'SELECT' &&
+                                _cnView && _cnView.contains(_activeEl)) ||
+                            (currentView === 'ma-licence-checks' &&
+                                _activeEl && (_activeEl.tagName === 'INPUT' || _activeEl.tagName === 'SELECT') &&
+                                _maView && _maView.contains(_activeEl));
+                        if (!_skipRender) {
                             switchView(currentView, false);
                         }
                     }
