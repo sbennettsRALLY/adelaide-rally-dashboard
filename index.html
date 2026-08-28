@@ -1263,7 +1263,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.03';
+        const DASHBOARD_VERSION = 'v4.04';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4424,8 +4424,7 @@
         let lastSyncTimestamp = 0;
         let syncFailureCount = 0; // consecutive pull failures — used to show stale/error status
         const DROPBOX_SYNC_INTERVAL = 5000; // Auto-sync every 5 seconds
-        const DROPBOX_STATE_FILE = '/Massive Events Corp Folders/Adelaide Rally 2026/03. Dashboard/AdelaideRallyState.json';
-        const DROPBOX_STATE_FILE_ID = 'id:skfxCCQMwGYAAAAAAAAl_g'; // Stable file ID — works for all accounts regardless of path routing
+        const DROPBOX_STATE_FILE = '/Adelaide Rally/Massive Events Corp Folders/Adelaide Rally 2026/03. Dashboard/AdelaideRallyState.json'; // Full canonical path — works for all shared-folder members
 
         // OAuth Helper Functions
         function generateCodeVerifier() {
@@ -4661,7 +4660,7 @@
                 const linkResponse = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ path: DROPBOX_STATE_FILE_ID })
+                    body: JSON.stringify({ path: DROPBOX_STATE_FILE })
                 });
                 if (!linkResponse.ok) {
                     alert('Could not reach Dropbox. Check your connection and try again.');
@@ -4784,7 +4783,7 @@
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer ' + token,
-                        'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE_ID, mode: 'overwrite' }),
+                        'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE, mode: 'overwrite' }),
                         'Content-Type': 'application/octet-stream'
                     },
                     body: JSON.stringify(state)
@@ -4801,7 +4800,7 @@
                     const linkResp = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', {
                         method: 'POST',
                         headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ path: DROPBOX_STATE_FILE_ID })
+                        body: JSON.stringify({ path: DROPBOX_STATE_FILE })
                     });
                     if (linkResp.ok) {
                         const linkData = await linkResp.json();
@@ -4978,7 +4977,7 @@
                         method: 'POST',
                         headers: {
                             'Authorization': 'Bearer ' + token,
-                            'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE_ID })
+                            'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE })
                         }
                     });
                     if (preCheckResp.ok) {
@@ -5085,7 +5084,7 @@
                     headers: {
                         'Authorization': 'Bearer ' + token,
                         'Dropbox-API-Arg': JSON.stringify({
-                            path: DROPBOX_STATE_FILE_ID,
+                            path: DROPBOX_STATE_FILE,
                             mode: 'overwrite'
                         }),
                         'Content-Type': 'application/octet-stream'
@@ -5133,7 +5132,7 @@
                         'Authorization': 'Bearer ' + token,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ path: DROPBOX_STATE_FILE_ID })
+                    body: JSON.stringify({ path: DROPBOX_STATE_FILE })
                 });
                 if (!linkResponse.ok) {
                     if (linkResponse.status === 401) {
