@@ -587,6 +587,7 @@
             <button class="nav-btn" onclick="switchView('doc-chase')">Document Chase</button>
             <button class="nav-btn" onclick="switchView('ma-licence')">MA Licence Obtain</button>
             <button class="nav-btn" onclick="switchView('ma-licence-checks')">MA Licence Checks</button>
+            <button class="nav-btn" onclick="switchView('auto-ma-checks')">Auto MA Checks</button>
             <button class="nav-btn" onclick="switchView('nav-marry')">Nav Marry</button>
             <button class="nav-btn" onclick="switchView('withdrawals')">Withdrawals</button>
             <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
@@ -866,6 +867,58 @@
             </div>
             <div id="maChecksNoData" class="no-data" style="display:none;">
                 <p>No data loaded</p>
+            </div>
+        </div>
+        <!-- Auto MA Licence Checks View -->
+        <div id="auto-ma-checks" class="view">
+            <div id="autoMAMsg" class="message"></div>
+            <div class="sec-title">Auto MA Licence Checks</div>
+            <div class="filters" style="flex-wrap:wrap;gap:8px;align-items:center;">
+                <label class="file-upload-btn" for="verificationCsvInput" style="cursor:pointer;">📤 Upload Verification Report</label>
+                <input type="file" id="verificationCsvInput" class="file-input" accept=".csv" />
+                <span id="verificationUploadStatus" style="font-size:12px;color:#555;"></span>
+                <input type="text" id="autoMASearch" class="fins" placeholder="Search name, entry #, licence #..." style="flex:1;min-width:180px;" />
+                <select id="autoMAFilterResult" class="fins" style="flex:0 0 auto;width:auto;min-width:140px;" onchange="renderAutoMALicenceChecks()">
+                    <option value="">All Results</option>
+                    <option value="pass">✅ Pass</option>
+                    <option value="warning">⚠️ Warning</option>
+                    <option value="fail">❌ Fail</option>
+                    <option value="event_providing">📋 Event Providing</option>
+                    <option value="not_found">❓ Not in Report</option>
+                    <option value="invalid">🚫 Invalid</option>
+                </select>
+                <select id="autoMAFilterCategory" class="fins" style="flex:0 0 auto;width:auto;min-width:130px;" onchange="renderAutoMALicenceChecks()">
+                    <option value="">All Categories</option>
+                </select>
+                <select id="autoMAFilterRole" class="fins" style="flex:0 0 auto;width:auto;min-width:120px;" onchange="renderAutoMALicenceChecks()">
+                    <option value="">All Roles</option>
+                    <option value="Driver">Driver</option>
+                    <option value="Navigator">Navigator</option>
+                </select>
+            </div>
+            <div class="stat-row" id="autoMAStats"></div>
+            <div class="tbl-wrap">
+                <table id="autoMATable" style="width:100%;font-size:13px;">
+                    <thead>
+                        <tr>
+                            <th>Entry #</th>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Category</th>
+                            <th>MA Licence #</th>
+                            <th>Best Licence</th>
+                            <th style="text-align:center;">Rating</th>
+                            <th style="text-align:center;">Required</th>
+                            <th>Expiry</th>
+                            <th style="text-align:center;">Result</th>
+                            <th style="text-align:center;width:55px;">✓ OK</th>
+                        </tr>
+                    </thead>
+                    <tbody id="autoMABody"></tbody>
+                </table>
+            </div>
+            <div id="autoMANoData" class="no-data" style="display:none;">
+                <p>Upload a verification report CSV to begin</p>
             </div>
         </div>
         <!-- Nav Marry View -->
@@ -1211,7 +1264,35 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.95';
+        const DASHBOARD_VERSION = 'v3.96';
+        // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
+        // d = driver rating, n = navigator rating
+        const MA_LICENCE_RATINGS = {
+            'Speed':                               {d:1,n:1},
+            'Circuit Provisional':                 {d:1,n:1},
+            'Circuit':                             {d:1,n:1},
+            'Rally Navigator':                     {d:0,n:2},
+            'Rally':                               {d:2,n:2},
+            'National Rally Navigator':            {d:0,n:3},
+            'National Rally':                      {d:3,n:3},
+            'Tarmac Rally Endorsement':            {d:4,n:4},
+            'Tarmac Rally Endorsement Category A': {d:5,n:5},
+            'International Rally C ITC-R':         {d:5,n:5},
+            'Competition Licence - High Performance': {d:5,n:5},
+        };
+        // ── Category Minimum Ratings ────────────────────────────────────────────
+        const MA_CATEGORY_MINIMUMS = {
+            'prima tour':          {d:1,n:1},
+            'branded tour':        {d:1,n:1},
+            'main tour':           {d:1,n:1},
+            'spirit tour':         {d:1,n:1},
+            'tsd':                 {d:1,n:1},
+            'challenge 120':       {d:1,n:1},
+            'challenge 130':       {d:3,n:3},
+            'competition':         {d:5,n:4},
+            'competition/rally pro':{d:5,n:4},
+        };
+        const MA_EVENT_DATE = new Date('2026-11-01'); // Licence expiry must be >= this date
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -1223,6 +1304,9 @@
         let maLicenceChecked = {};      // {[entryId]: true/false} — manual Licence Ok checkbox on dashboard
         let maExpiryOverride = {};      // {[entryId]: 'dd/mm/yyyy'} — manually entered expiry dates on MA Checks tab
         let maLicenceTypeManual = {};   // {[entryId]: string} — manually entered MA Licence Type on MA Checks tab
+        let maVerificationData = [];    // [{FirstName,LastName,MemberNumber,LicenceType,LicenceExpiry,Status}] — uploaded verification report rows
+        let maVerificationTimestamp = 0; // Unix ms — when verification CSV was last uploaded
+        let maAutoChecked = {};         // {[entryId]: true/false} — manual override on Auto MA Checks tab
         let navigationMarryEntries = []; // Legacy field — kept for Dropbox backward compat but not used by UI
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
@@ -1525,6 +1609,12 @@
             });
             document.getElementById('uploadBtn').addEventListener('click', () => document.getElementById('csvInput').click());
             document.getElementById('csvInput').addEventListener('change', handleFileUpload);
+            document.getElementById('verificationCsvInput').addEventListener('change', function(e) {
+                const file = e.target.files && e.target.files[0];
+                if (file) handleVerificationUpload(file);
+                e.target.value = '';
+            });
+            document.getElementById('autoMASearch').addEventListener('keyup', renderAutoMALicenceChecks);
             document.getElementById('csvSearch').addEventListener('keyup', filterCsvTable);
             document.getElementById('docSearch').addEventListener('keyup', filterDocuments);
             document.getElementById('maSearch').addEventListener('keyup', renderMALicenceTable);
@@ -2724,6 +2814,298 @@
         }
 
 
+        // ─── Auto MA Licence Checks ───────────────────────────────────────────────────────────────────────
+
+        function handleVerificationUpload(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const lines = e.target.result.split(/\r?\n/);
+                    if (lines.length < 2) { showMessage('autoMAMsg', 'error', '⚠️ Empty or invalid CSV file.'); return; }
+                    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g,'').trim());
+                    const rows = [];
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+                        // Simple CSV parse: handle quoted fields
+                        const cells = [];
+                        let inQ = false, cur = '';
+                        for (let ci = 0; ci < line.length; ci++) {
+                            const ch = line[ci];
+                            if (ch === '"') { inQ = !inQ; }
+                            else if (ch === ',' && !inQ) { cells.push(cur.trim()); cur = ''; }
+                            else { cur += ch; }
+                        }
+                        cells.push(cur.trim());
+                        const obj = {};
+                        headers.forEach((h, hi) => { obj[h] = (cells[hi] || '').trim(); });
+                        if (obj.MemberNumber || obj.FirstName || obj.LastName) rows.push(obj);
+                    }
+                    if (rows.length === 0) { showMessage('autoMAMsg', 'error', '⚠️ No data rows found in verification report.'); return; }
+                    maVerificationData    = rows;
+                    maVerificationTimestamp = Date.now();
+                    saveToStorage();
+                    const statusEl = document.getElementById('verificationUploadStatus');
+                    if (statusEl) statusEl.textContent = rows.length + ' records loaded from ' + file.name;
+                    showMessage('autoMAMsg', 'success', '✓ Verification report loaded: ' + rows.length + ' records from ' + file.name);
+                    renderAutoMALicenceChecks();
+                } catch (err) {
+                    showMessage('autoMAMsg', 'error', '⚠️ Failed to parse verification report: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function _getAutoMAResult(maNumber, role, category) {
+            // role: 'Driver' | 'Navigator' | 'Unknown'
+            // Returns { status, label, licenceType, rating, required, expiry, statusDetail }
+            const roleKey = role === 'Navigator' ? 'n' : 'd'; // default to driver
+            const catKey  = (category || '').toLowerCase().trim();
+            const catMin  = MA_CATEGORY_MINIMUMS[catKey] || {d:1, n:1};
+            const required = catMin[roleKey];
+
+            if (!maNumber) return { status:'event_providing', label:'Event Providing', licenceType:'—', rating:null, required, expiry:'—', statusDetail:'' };
+
+            const mnNorm = String(maNumber).trim();
+            const records = maVerificationData.filter(r => String(r.MemberNumber || '').trim() === mnNorm);
+
+            if (records.length === 0) return { status:'not_found', label:'Not in Report', licenceType:'—', rating:null, required, expiry:'—', statusDetail:'' };
+
+            // Check if ALL records are Invalid
+            const validRecords = records.filter(r => r.Status !== 'Invalid');
+            if (validRecords.length === 0) return { status:'invalid', label:'Invalid Member #', licenceType:'—', rating:null, required, expiry:'—', statusDetail:'No matching member found' };
+
+            // Find the best licence: Active, then Under Review — must have valid expiry and known rating
+            let bestActive = null, bestActiveRating = -1;
+            let bestWarning = null, bestWarningRating = -1;
+
+            validRecords.forEach(rec => {
+                const lt = (rec.LicenceType || '').trim();
+                if (!lt) return;
+                const ratingObj = MA_LICENCE_RATINGS[lt];
+                if (!ratingObj) return; // unknown licence type — skip
+                const rating = ratingObj[roleKey];
+                // Parse expiry
+                const expStr = (rec.LicenceExpiry || '').trim();
+                if (!expStr) return;
+                const expDate = new Date(expStr);
+                if (isNaN(expDate.getTime())) return;
+                // Must not be expired before event date
+                if (expDate < MA_EVENT_DATE) return;
+                const st = (rec.Status || '').trim();
+                if (st === 'Active' && rating > bestActiveRating) { bestActive = rec; bestActiveRating = rating; }
+                if (st === 'Under Review' && rating > bestWarningRating) { bestWarning = rec; bestWarningRating = rating; }
+            });
+
+            const best = bestActive || bestWarning;
+            if (!best) {
+                // All licences expired or unknown type — check if there are expired records
+                return { status:'fail', label:'No Valid Licence', licenceType:'All Expired/Unknown', rating:0, required, expiry:'', statusDetail:'All licences expired before event date or unknown type' };
+            }
+
+            const bestRating = best === bestActive ? bestActiveRating : bestWarningRating;
+            const meetsReq   = bestRating >= required;
+            const isWarning  = !bestActive && !!bestWarning; // only Under Review, no Active
+
+            let status, label;
+            if (!meetsReq)       { status = 'fail';    label = 'Fail'; }
+            else if (isWarning)  { status = 'warning'; label = 'Under Review'; }
+            else                 { status = 'pass';    label = 'Pass'; }
+
+            return { status, label, licenceType: (best.LicenceType || '').trim(), rating: bestRating, required, expiry: (best.LicenceExpiry || '').trim(), statusDetail: best.Status };
+        }
+
+        function renderAutoMALicenceChecks() {
+            if (csvData.length === 0) {
+                document.getElementById('autoMANoData').style.display = 'block';
+                document.getElementById('autoMANoData').querySelector('p').textContent = 'No entry CSV loaded — upload a CSV first.';
+                document.getElementById('autoMATable').style.display = 'none';
+                document.getElementById('autoMAStats').innerHTML = '';
+                return;
+            }
+            if (maVerificationData.length === 0) {
+                document.getElementById('autoMANoData').style.display = 'block';
+                document.getElementById('autoMANoData').querySelector('p').textContent = 'Upload a Motorsport Australia verification report CSV to begin.';
+                document.getElementById('autoMATable').style.display = 'none';
+                document.getElementById('autoMAStats').innerHTML = '';
+                // Show upload timestamp if loaded but empty (shouldn't happen, but safe)
+                const statusEl = document.getElementById('verificationUploadStatus');
+                if (statusEl && !statusEl.textContent) statusEl.textContent = '';
+                return;
+            }
+            document.getElementById('autoMANoData').style.display = 'none';
+            document.getElementById('autoMATable').style.display = '';
+
+            // Update verification status badge
+            const statusEl = document.getElementById('verificationUploadStatus');
+            if (statusEl && maVerificationData.length > 0 && !statusEl.textContent) {
+                statusEl.textContent = maVerificationData.length + ' records loaded';
+            }
+
+            const entryIdIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const firstNameIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lastNameIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const licenceNumIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+            const categoryIdxs  = csvHeaders.map((h,i) => h.toLowerCase().includes('i am entering') ? i : -1).filter(i => i >= 0);
+
+            // Determine role from which "I am entering" column has a value
+            // and whether it says DRIVER or NAVIGATOR
+            const driverCatIdxs   = categoryIdxs.filter(i => {
+                const h = csvHeaders[i].toLowerCase();
+                // DRIVER/NAVIGATOR = driver primary; NAVIGATOR/DRIVER = navigator primary
+                return h.includes('as a driver') && !h.includes('navigator/driver');
+            });
+            const navigatorCatIdxs = categoryIdxs.filter(i => {
+                const h = csvHeaders[i].toLowerCase();
+                return h.includes('as a navigator') && !h.includes('driver/navigator');
+            });
+
+            // Sort by entry ID
+            const sortedIndices = Array.from({length: csvData.length}, (_, i) => i)
+                .sort((a, b) => {
+                    const nA = entryIdIdx >= 0 ? parseInt(csvData[a][entryIdIdx]) || 0 : 0;
+                    const nB = entryIdIdx >= 0 ? parseInt(csvData[b][entryIdIdx]) || 0 : 0;
+                    return nA - nB;
+                });
+
+            // ── Pass 1: build all entries + populate category filter ──────────────
+            const allEntries = [];
+            sortedIndices.forEach(idx => {
+                const row    = csvData[idx];
+                const eid    = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!eid || withdrawn.has(eid)) return;
+                const firstName = firstNameIdx >= 0 ? (row[firstNameIdx] || '').trim() : '';
+                const lastName  = lastNameIdx  >= 0 ? (row[lastNameIdx]  || '').trim() : '';
+                const name      = [firstName, lastName].filter(Boolean).join(' ') || eid;
+                const maNum     = licenceNumIdx >= 0 ? (row[licenceNumIdx] || '').trim() : '';
+                const category  = getCategory(row, categoryIdxs);
+
+                // Determine role
+                let role = 'Unknown';
+                const hasDriver = driverCatIdxs.some(i => (row[i] || '').trim());
+                const hasNav    = navigatorCatIdxs.some(i => (row[i] || '').trim());
+                if (hasDriver && !hasNav) role = 'Driver';
+                else if (hasNav && !hasDriver) role = 'Navigator';
+                else if (hasDriver && hasNav) role = 'Driver'; // both — default driver
+                else {
+                    // Fall back: check any category column
+                    const anyCat = categoryIdxs.find(i => (row[i] || '').trim());
+                    if (anyCat !== undefined) {
+                        const h = csvHeaders[anyCat].toLowerCase();
+                        role = h.includes('navigator') && !h.includes('driver/navigator') ? 'Navigator' : 'Driver';
+                    }
+                }
+
+                const result = _getAutoMAResult(maNum, role, category);
+                allEntries.push({ eid, name, maNum, category, role, result });
+            });
+
+            // ── Populate dynamic category filter ──────────────────────────────────
+            const catSel = document.getElementById('autoMAFilterCategory');
+            if (catSel) {
+                const curCat = catSel.value;
+                const uniqueCats = [...new Set(allEntries.map(e => e.category).filter(Boolean).sort())];
+                catSel.innerHTML = '<option value="">All Categories</option>';
+                uniqueCats.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c; opt.textContent = c;
+                    catSel.appendChild(opt);
+                });
+                if (uniqueCats.includes(curCat)) catSel.value = curCat;
+            }
+
+            // ── Read filters ──────────────────────────────────────────────────────
+            const fResult   = (document.getElementById('autoMAFilterResult')   || {}).value || '';
+            const fCategory = (document.getElementById('autoMAFilterCategory') || {}).value || '';
+            const fRole     = (document.getElementById('autoMAFilterRole')     || {}).value || '';
+            const searchTerm= (document.getElementById('autoMASearch')         || {}).value?.toLowerCase() || '';
+
+            // ── Stats ─────────────────────────────────────────────────────────────
+            const counts = {pass:0, warning:0, fail:0, event_providing:0, not_found:0, invalid:0};
+            allEntries.forEach(e => { if (counts[e.result.status] !== undefined) counts[e.result.status]++; });
+
+            const statsEl = document.getElementById('autoMAStats');
+            statsEl.innerHTML = [
+                ['Total', allEntries.length, '#F3F4F6'],
+                ['✅ Pass', counts.pass, '#D1FAE5'],
+                ['⚠️ Warning', counts.warning, '#FEF3C7'],
+                ['❌ Fail', counts.fail, '#FEE2E2'],
+                ['📋 Event Providing', counts.event_providing, '#DBEAFE'],
+                ['❓ Not in Report', counts.not_found, '#E5E7EB'],
+                ['🚫 Invalid', counts.invalid, '#FECACA'],
+            ].map(([lbl, num, bg]) =>
+                `<div class="stat-chip no-click" style="background:${bg}"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`
+            ).join('');
+
+            // ── Pass 2: render filtered rows ──────────────────────────────────────
+            const tbody = document.getElementById('autoMABody');
+            tbody.innerHTML = '';
+
+            const STATUS_STYLES = {
+                pass:           { bg:'#D1FAE5', badge:'background:#059669;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;' },
+                warning:        { bg:'#FEF9C3', badge:'background:#D97706;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;' },
+                fail:           { bg:'#FEE2E2', badge:'background:#DC2626;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;' },
+                event_providing:{ bg:'#DBEAFE', badge:'background:#2563EB;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;' },
+                not_found:      { bg:'#F3F4F6', badge:'background:#6B7280;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;' },
+                invalid:        { bg:'#FECACA', badge:'background:#DC2626;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;' },
+            };
+
+            allEntries.forEach(({ eid, name, maNum, category, role, result }) => {
+                if (fResult   && result.status !== fResult)   return;
+                if (fCategory && category       !== fCategory) return;
+                if (fRole     && role           !== fRole)     return;
+                const searchable = [eid, name, maNum, category, role, result.licenceType, result.label].join(' ').toLowerCase();
+                if (searchTerm && !searchable.includes(searchTerm)) return;
+
+                const style = STATUS_STYLES[result.status] || STATUS_STYLES.fail;
+                const tr = document.createElement('tr');
+                tr.style.background = maAutoChecked[eid] ? '#f0fdf4' : style.bg;
+                tr.title = result.statusDetail || '';
+
+                const ratingDisplay  = result.rating  !== null ? result.rating  : '—';
+                const requiredDisplay= result.required !== undefined ? result.required : '—';
+
+                // Format expiry for display
+                let expiryDisplay = result.expiry || '—';
+                if (expiryDisplay && expiryDisplay !== '—') {
+                    try {
+                        const d = new Date(expiryDisplay);
+                        if (!isNaN(d.getTime())) {
+                            const dd = String(d.getUTCDate()).padStart(2,'0');
+                            const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+                            const yy = d.getUTCFullYear();
+                            expiryDisplay = dd+'/'+mm+'/'+yy;
+                        }
+                    } catch(e) {}
+                }
+
+                const isChecked = maAutoChecked[eid] === true;
+                tr.innerHTML = `
+                    <td style="white-space:nowrap;">${eid}</td>
+                    <td style="white-space:nowrap;">${name}</td>
+                    <td style="white-space:nowrap;">${role}</td>
+                    <td style="white-space:nowrap;">${category || '—'}</td>
+                    <td style="white-space:nowrap;font-family:monospace;">${maNum || '—'}</td>
+                    <td style="font-size:12px;">${result.licenceType}</td>
+                    <td style="text-align:center;">${ratingDisplay}</td>
+                    <td style="text-align:center;">${requiredDisplay}</td>
+                    <td style="white-space:nowrap;">${expiryDisplay}</td>
+                    <td style="text-align:center;"><span style="${style.badge}">${result.label}</span></td>
+                    <td style="text-align:center;">
+                        <input type="checkbox" ${isChecked ? 'checked' : ''}
+                            onchange="maAutoChecked['${eid}'] = this.checked; saveToStorage(); renderAutoMALicenceChecks();"
+                            title="Mark as manually verified OK" />
+                    </td>`;
+                tbody.appendChild(tr);
+            });
+
+            if (tbody.children.length === 0) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = '<td colspan="11" style="text-align:center;padding:20px;color:#888;">No entries match current filters.</td>';
+                tbody.appendChild(tr);
+            }
+        }
+
         // ─── MA verification PDF functions removed in v3.87 — all licence data is now entered manually ───
         async function _REMOVED_parseAndApplyVerificationPDF(file) {
             const pdfjsLib = window['pdfjs-dist/build/pdf'];
@@ -3823,6 +4205,8 @@
                 renderMALicenceTable();
             } else if (viewName === 'ma-licence-checks') {
                 renderMALicenceChecks();
+            } else if (viewName === 'auto-ma-checks') {
+                renderAutoMALicenceChecks();
             } else if (viewName === 'nav-marry') {
                 renderNavMarryTable();
             } else if (viewName === 'withdrawals') {
@@ -3891,6 +4275,9 @@
                 maLicenceChecked,
                 maExpiryOverride,
                 maLicenceTypeManual,
+                maVerificationData,
+                maVerificationTimestamp,
+                maAutoChecked,
                 stateTimestamps: {
                     carNumbers: carNumberTimestamp,
                     customCarSlots: customCarSlotsTimestamp,
@@ -3935,6 +4322,9 @@
                     maLicenceChecked = data.maLicenceChecked || {};
                     maExpiryOverride = data.maExpiryOverride || {};
                     maLicenceTypeManual = data.maLicenceTypeManual || {};
+                    maVerificationData = data.maVerificationData || [];
+                    maVerificationTimestamp = data.maVerificationTimestamp || 0;
+                    maAutoChecked = data.maAutoChecked || {};
                     const _ts = data.stateTimestamps || {};
                     carNumberTimestamp = _ts.carNumbers || 0;
                     customCarSlotsTimestamp = _ts.customCarSlots || 0;
@@ -4507,6 +4897,19 @@
                         _pt2(remoteState.maExpiryOverride,   maExpiryOverride);
                         _pt2(remoteState.maLicenceTypeManual, maLicenceTypeManual);
 
+                        // Verification report: adopt remote if newer (last upload wins)
+                        const remVerTs = remoteState.maVerificationTimestamp || 0;
+                        if (remVerTs > maVerificationTimestamp && Array.isArray(remoteState.maVerificationData)) {
+                            maVerificationData    = remoteState.maVerificationData;
+                            maVerificationTimestamp = remVerTs;
+                        }
+                        // maAutoChecked: same merge as maLicenceChecked (union, local explicit false wins)
+                        if (remoteState.maAutoChecked) {
+                            Object.entries(remoteState.maAutoChecked).forEach(([k, v]) => {
+                                if (v === true && maAutoChecked[k] !== false) maAutoChecked[k] = true;
+                            });
+                        }
+
                         // Timestamps: max-value merge per entry (latest wins)
                         const _ptm = (rem, loc) => {
                             if (!rem) return;
@@ -4543,6 +4946,9 @@
                     maLicenceChecked: maLicenceChecked, // keep false values so unticks propagate via Dropbox
                     maExpiryOverride: maExpiryOverride,
                     maLicenceTypeManual: maLicenceTypeManual,
+                    maVerificationData: maVerificationData,
+                    maVerificationTimestamp: maVerificationTimestamp,
+                    maAutoChecked: maAutoChecked,
                     stateTimestamps: {
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
@@ -4962,6 +5368,36 @@
                         }
                     }
 
+                    // Merge maVerificationData: last upload wins (newest timestamp takes precedence)
+                    {
+                        const remVerTs = remoteState.maVerificationTimestamp || 0;
+                        if (remVerTs > maVerificationTimestamp && Array.isArray(remoteState.maVerificationData)) {
+                            maVerificationData    = remoteState.maVerificationData;
+                            maVerificationTimestamp = remVerTs;
+                            stateUpdated = true;
+                        } else if (maVerificationTimestamp > remVerTs && maVerificationData.length > 0) {
+                            localAhead = true;
+                        }
+                    }
+
+                    // Merge maAutoChecked: true wins per-entry (same strategy as maLicenceChecked)
+                    {
+                        const remAC = remoteState.maAutoChecked || {};
+                        const mergedAC = { ...maAutoChecked };
+                        Object.entries(remAC).forEach(([k, v]) => {
+                            if (v === true && mergedAC[k] !== false) mergedAC[k] = true;
+                            else if (v === false && mergedAC[k] === undefined) mergedAC[k] = false;
+                        });
+                        if (Object.keys(maAutoChecked).some(k =>
+                            (maAutoChecked[k] === true && remAC[k] !== true) ||
+                            (maAutoChecked[k] === false && remAC[k] === true)
+                        )) localAhead = true;
+                        if (JSON.stringify(mergedAC) !== JSON.stringify(maAutoChecked)) {
+                            maAutoChecked = mergedAC;
+                            stateUpdated = true;
+                        }
+                    }
+
                     // Always persist the merged state to localStorage so the next page load
                     // starts from the Dropbox-merged snapshot, not the old local-only snapshot.
                     // We write localStorage directly here (not via saveToStorage) to avoid
@@ -4974,6 +5410,7 @@
                             navigationMarryEntries, carNumberAssignments,
                             customCarSlots, manualNavMatches,
                             maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
+                            maVerificationData, maVerificationTimestamp, maAutoChecked,
                             stateTimestamps: {
                                 carNumbers: carNumberTimestamp,
                                 customCarSlots: customCarSlotsTimestamp,
@@ -5002,15 +5439,19 @@
                         const _activeEl = document.activeElement;
                         // Skip re-render if user has a SELECT open in car-numbers (destroys dropdown)
                         // or a text/date INPUT focused in ma-licence-checks (would lose unsaved typing)
-                        const _cnView  = document.getElementById('car-numbers');
-                        const _maView  = document.getElementById('ma-licence-checks');
+                        const _cnView   = document.getElementById('car-numbers');
+                        const _maView   = document.getElementById('ma-licence-checks');
+                        const _autoMAView = document.getElementById('auto-ma-checks');
                         const _skipRender =
                             (currentView === 'car-numbers' &&
                                 _activeEl && _activeEl.tagName === 'SELECT' &&
                                 _cnView && _cnView.contains(_activeEl)) ||
                             (currentView === 'ma-licence-checks' &&
                                 _activeEl && (_activeEl.tagName === 'INPUT' || _activeEl.tagName === 'SELECT') &&
-                                _maView && _maView.contains(_activeEl));
+                                _maView && _maView.contains(_activeEl)) ||
+                            (currentView === 'auto-ma-checks' &&
+                                _activeEl && (_activeEl.tagName === 'INPUT' || _activeEl.tagName === 'SELECT') &&
+                                _autoMAView && _autoMAView.contains(_activeEl));
                         if (!_skipRender) {
                             switchView(currentView, false);
                         }
@@ -5991,7 +6432,40 @@
                     XLSX.utils.book_append_sheet(wb, maChecksWs, 'MA Licence Checks');
                 }
 
-                // ===== SHEET 9: MA Licence CSV (Licence # + Last Name, no headers) =====
+                // ===== SHEET 9: Auto MA Licence Checks =====
+                if (maVerificationData.length > 0) {
+                    const _licNumIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
+                    const _catIdxs      = csvHeaders.map((h,i) => h.toLowerCase().includes('i am entering') ? i : -1).filter(i => i >= 0);
+                    const _driverCatIdxs   = _catIdxs.filter(i => { const h=csvHeaders[i].toLowerCase(); return h.includes('as a driver')&&!h.includes('navigator/driver'); });
+                    const _navCatIdxs      = _catIdxs.filter(i => { const h=csvHeaders[i].toLowerCase(); return h.includes('as a navigator')&&!h.includes('driver/navigator'); });
+                    const autoMAData = [['Entry #','Name','Role','Category','MA Licence #','Best Licence','Rating','Required','Expiry','Status','Result','Manually Verified OK']];
+                    sortedIndices.forEach(idx => {
+                        const row   = csvData[idx];
+                        const eid   = entryIdIdx >= 0 ? (row[entryIdIdx]  || '').trim() : '';
+                        if (!eid || withdrawn.has(eid)) return;
+                        const firstName = firstNameIdx >= 0 ? (row[firstNameIdx] || '').trim() : '';
+                        const lastName  = lastNameIdx  >= 0 ? (row[lastNameIdx]  || '').trim() : '';
+                        const name      = [firstName, lastName].filter(Boolean).join(' ');
+                        const maNum     = _licNumIdx >= 0 ? (row[_licNumIdx] || '').trim() : '';
+                        const category  = getCategory(row, _catIdxs);
+                        let role = 'Unknown';
+                        const hasDriver = _driverCatIdxs.some(i => (row[i]||'').trim());
+                        const hasNav    = _navCatIdxs.some(i    => (row[i]||'').trim());
+                        if (hasDriver && !hasNav) role = 'Driver';
+                        else if (hasNav && !hasDriver) role = 'Navigator';
+                        else if (hasDriver) role = 'Driver';
+                        else {
+                            const anyCat = _catIdxs.find(i => (row[i]||'').trim());
+                            if (anyCat !== undefined) { const h=csvHeaders[anyCat].toLowerCase(); role=h.includes('navigator')&&!h.includes('driver/navigator')?'Navigator':'Driver'; }
+                        }
+                        const res = _getAutoMAResult(maNum, role, category);
+                        autoMAData.push([eid, name, role, category, maNum||'', res.licenceType, res.rating!==null?res.rating:'', res.required!==undefined?res.required:'', res.expiry||'', res.statusDetail||'', res.label, maAutoChecked[eid]?'✓':'']);
+                    });
+                    const autoMAWs = XLSX.utils.aoa_to_sheet(autoMAData);
+                    XLSX.utils.book_append_sheet(wb, autoMAWs, 'Auto MA Checks');
+                }
+
+                // ===== SHEET 10: MA Licence CSV (Licence # + Last Name, no headers) =====
                 {
                     const licHoldsIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
                     const licNumIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
