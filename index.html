@@ -1263,7 +1263,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.00';
+        const DASHBOARD_VERSION = 'v4.01';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4788,14 +4788,48 @@
                     },
                     body: JSON.stringify(state)
                 });
-                if (response.ok) {
-                    lastSyncTimestamp = Date.now();
-                    updateDropboxStatus();
-                    localStorage.setItem('adelaideRallyData', JSON.stringify({...state, timestamp: new Date().toISOString()}));
-                    alert('✓ Force Push complete\n\nDropbox updated with ' + csvData.length + ' entries.\n\nOther users will see this data on their next sync (within 5 seconds).');
-                } else {
+                if (!response.ok) {
                     const err = await response.text();
                     alert('Push failed: ' + response.status + '\n' + err);
+                    return;
+                }
+                // Verify the push landed at the correct shared path by reading it back
+                if (btn) { btn.textContent = '⏳ Verifying…'; }
+                let verifyMsg = '', verifyOk = false;
+                try {
+                    const linkResp = await fetch('https://api.dropboxapi.com/2/files/get_temporary_link', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: DROPBOX_STATE_FILE })
+                    });
+                    if (linkResp.ok) {
+                        const linkData = await linkResp.json();
+                        const verifyResp = await fetch(linkData.link, { mode: 'cors', credentials: 'omit' });
+                        if (verifyResp.ok) {
+                            const verifyState = JSON.parse(await verifyResp.text());
+                            const verifyRows = verifyState.csvData ? verifyState.csvData.length : 0;
+                            if (verifyRows === csvData.length) {
+                                verifyOk = true;
+                                verifyMsg = '✓ Verified: ' + verifyRows + ' rows confirmed in Dropbox.';
+                            } else {
+                                verifyMsg = '⚠ WARNING: Dropbox shows ' + verifyRows + ' rows but you pushed ' + csvData.length + '.\n\nYour push may have landed in the wrong Dropbox location — the shared file was not updated.\n\nScreenshot this and send to your coordinator.';
+                            }
+                        } else {
+                            verifyMsg = '⚠ Could not verify — unable to re-read the file after push.\n\nScreenshot this and send to your coordinator.';
+                        }
+                    } else {
+                        verifyMsg = '⚠ Could not verify — the file path may not exist in your Dropbox account.\n\nYour data was uploaded but may NOT be in the correct shared location. Screenshot this and send to your coordinator.';
+                    }
+                } catch(ve) {
+                    verifyMsg = '⚠ Verification error: ' + ve.message;
+                }
+                lastSyncTimestamp = Date.now();
+                updateDropboxStatus();
+                localStorage.setItem('adelaideRallyData', JSON.stringify({...state, timestamp: new Date().toISOString()}));
+                if (verifyOk) {
+                    alert('✓ Force Push complete\n\n' + verifyMsg + '\n\nOthers will see this data on their next sync (within 5 seconds).');
+                } else {
+                    alert('Force Push — upload succeeded but verification failed.\n\n' + verifyMsg);
                 }
             } catch(e) {
                 alert('Force Push failed: ' + e.message);
