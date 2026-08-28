@@ -907,8 +907,6 @@
                             <th>Category</th>
                             <th>MA Licence #</th>
                             <th>Best Licence</th>
-                            <th style="text-align:center;">Rating</th>
-                            <th style="text-align:center;">Required</th>
                             <th>Expiry</th>
                             <th style="text-align:center;">Result</th>
                             <th style="text-align:center;width:55px;">✓ OK</th>
@@ -1264,7 +1262,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.97';
+        const DASHBOARD_VERSION = 'v3.98';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -3050,16 +3048,21 @@
             allEntries.forEach(e => { if (counts[e.result.status] !== undefined) counts[e.result.status]++; });
 
             const statsEl = document.getElementById('autoMAStats');
+            // Stat chips: "Total" clears the filter; others filter to that result type.
+            const _setResultFilter = v => {
+                const sel = document.getElementById('autoMAFilterResult');
+                if (sel) { sel.value = v; renderAutoMALicenceChecks(); }
+            };
             statsEl.innerHTML = [
-                ['Total', allEntries.length, '#F3F4F6'],
-                ['✅ Pass', counts.pass, '#D1FAE5'],
-                ['⚠️ Warning', counts.warning, '#FEF3C7'],
-                ['❌ Fail', counts.fail, '#FEE2E2'],
-                ['📋 Event Providing', counts.event_providing, '#DBEAFE'],
-                ['❓ Not in Report', counts.not_found, '#E5E7EB'],
-                ['🚫 Invalid', counts.invalid, '#FECACA'],
-            ].map(([lbl, num, bg]) =>
-                `<div class="stat-chip no-click" style="background:${bg}"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`
+                ['Total',            allEntries.length,          '#F3F4F6', ''],
+                ['✅ Pass',           counts.pass,                '#D1FAE5', 'pass'],
+                ['⚠️ Warning',        counts.warning,             '#FEF3C7', 'warning'],
+                ['❌ Fail',           counts.fail,                '#FEE2E2', 'fail'],
+                ['📋 Event Providing',counts.event_providing,     '#DBEAFE', 'event_providing'],
+                ['❓ Not in Report',  counts.not_found,           '#E5E7EB', 'not_found'],
+                ['🚫 Invalid',        counts.invalid,             '#FECACA', 'invalid'],
+            ].map(([lbl, num, bg, filterVal]) =>
+                `<div class="stat-chip" style="background:${bg};cursor:pointer;" onclick="_setResultFilter('${filterVal}')"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`
             ).join('');
 
             // ── Pass 2: render filtered rows ──────────────────────────────────────
@@ -3087,9 +3090,6 @@
                 tr.style.background = maAutoChecked[eid] ? '#f0fdf4' : style.bg;
                 tr.title = result.statusDetail || '';
 
-                const ratingDisplay  = result.rating  !== null ? result.rating  : '—';
-                const requiredDisplay= result.required !== undefined ? result.required : '—';
-
                 // Format expiry for display
                 let expiryDisplay = result.expiry || '—';
                 if (expiryDisplay && expiryDisplay !== '—') {
@@ -3112,8 +3112,6 @@
                     <td style="white-space:nowrap;">${category || '—'}</td>
                     <td style="white-space:nowrap;font-family:monospace;">${maNum || '—'}</td>
                     <td style="font-size:12px;">${result.licenceType}</td>
-                    <td style="text-align:center;">${ratingDisplay}</td>
-                    <td style="text-align:center;">${requiredDisplay}</td>
                     <td style="white-space:nowrap;">${expiryDisplay}</td>
                     <td style="text-align:center;"><span style="${style.badge}">${result.label}</span></td>
                     <td style="text-align:center;">
@@ -3126,7 +3124,7 @@
 
             if (tbody.children.length === 0) {
                 const tr = document.createElement('tr');
-                tr.innerHTML = '<td colspan="11" style="text-align:center;padding:20px;color:#888;">No entries match current filters.</td>';
+                tr.innerHTML = '<td colspan="9" style="text-align:center;padding:20px;color:#888;">No entries match current filters.</td>';
                 tbody.appendChild(tr);
             }
         }
@@ -6463,7 +6461,7 @@
                     const _catIdxs      = csvHeaders.map((h,i) => h.toLowerCase().includes('i am entering') ? i : -1).filter(i => i >= 0);
                     const _driverCatIdxs   = _catIdxs.filter(i => { const h=csvHeaders[i].toLowerCase(); return h.includes('as a driver')&&!h.includes('navigator/driver'); });
                     const _navCatIdxs      = _catIdxs.filter(i => { const h=csvHeaders[i].toLowerCase(); return h.includes('as a navigator')&&!h.includes('driver/navigator'); });
-                    const autoMAData = [['Entry #','Name','Role','Category','MA Licence #','Best Licence','Rating','Required','Expiry','Status','Result','Manually Verified OK']];
+                    const autoMAData = [['Entry #','Name','Role','Category','MA Licence #','Best Licence','Expiry','Status','Result','Manually Verified OK']];
                     sortedIndices.forEach(idx => {
                         const row   = csvData[idx];
                         const eid   = entryIdIdx >= 0 ? (row[entryIdIdx]  || '').trim() : '';
@@ -6484,7 +6482,7 @@
                             if (anyCat !== undefined) { const h=csvHeaders[anyCat].toLowerCase(); role=h.includes('navigator')&&!h.includes('driver/navigator')?'Navigator':'Driver'; }
                         }
                         const res = _getAutoMAResult(maNum, role, category);
-                        autoMAData.push([eid, name, role, category, maNum||'', res.licenceType, res.rating!==null?res.rating:'', res.required!==undefined?res.required:'', res.expiry||'', res.statusDetail||'', res.label, maAutoChecked[eid]?'✓':'']);
+                        autoMAData.push([eid, name, role, category, maNum||'', res.licenceType, res.expiry||'', res.statusDetail||'', res.label, maAutoChecked[eid]?'✓':'']);
                     });
                     const autoMAWs = XLSX.utils.aoa_to_sheet(autoMAData);
                     XLSX.utils.book_append_sheet(wb, autoMAWs, 'Auto MA Checks');
