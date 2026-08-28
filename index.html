@@ -571,6 +571,7 @@
                 <span id="versionBadge" style="font-size:11px;color:rgba(255,255,255,0.55);font-weight:500;letter-spacing:0.03em;margin-right:4px;"></span>
                 <button class="dropbox-auth-btn" id="dropboxAuthBtn" onclick="initiateDropboxAuth()">Connect to Server</button>
                 <button class="btn-reset" id="dropboxForceSyncBtn" onclick="forceSyncFromDropbox()" style="display:none;font-size:11px;padding:3px 8px;" title="Force pull latest data from Dropbox (overwrites local state)">↻ Force Sync</button>
+                <button class="btn-reset" id="dropboxForcePushBtn" onclick="forcePushToDropbox()" style="display:none;font-size:11px;padding:3px 8px;background:#1a6b3c;color:#fff;" title="Force push YOUR local data to Dropbox — use if others are missing your latest entries">↑ Force Push</button>
                 <button class="btn-reset" id="dropboxReconnectBtn" onclick="reconnectDropbox()" style="display:none;font-size:11px;padding:3px 8px;background:#555;color:#fff;" title="Reconnect to Dropbox — use if sync looks wrong or you need to switch accounts">⟳ Reconnect</button>
                 <div class="dropbox-status" id="dropboxStatus">✓ Connected</div>
                 <div class="countdown-box">
@@ -1262,7 +1263,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.98';
+        const DASHBOARD_VERSION = 'v4.00';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4559,6 +4560,7 @@
             const authBtn = document.getElementById('dropboxAuthBtn');
             const statusDiv = document.getElementById('dropboxStatus');
             const forceSyncBtn = document.getElementById('dropboxForceSyncBtn');
+            const forcePushBtn = document.getElementById('dropboxForcePushBtn');
             const reconnectBtn = document.getElementById('dropboxReconnectBtn');
             const disconnectBanner = document.getElementById('dropbox-disconnect-banner');
 
@@ -4566,6 +4568,7 @@
                 // Sync is failing — show error state, reconnect button, and prominent banner
                 authBtn.style.display = 'inline-block';
                 if (forceSyncBtn) forceSyncBtn.style.display = 'none';
+                if (forcePushBtn) forcePushBtn.style.display = 'none';
                 if (reconnectBtn) reconnectBtn.style.display = 'none';
                 statusDiv.classList.remove('connected');
                 statusDiv.classList.add('sync-error');
@@ -4583,6 +4586,7 @@
                 // Token present — verify sync is actually recent before showing green
                 authBtn.style.display = 'none';
                 if (forceSyncBtn) forceSyncBtn.style.display = 'inline-block';
+                if (forcePushBtn) forcePushBtn.style.display = 'inline-block';
                 if (reconnectBtn) reconnectBtn.style.display = 'inline-block';
                 const staleThreshold = DROPBOX_SYNC_INTERVAL * 6; // 30s: if 6+ auto-sync cycles missed, something is wrong
                 const isStale = lastSyncTimestamp && (Date.now() - lastSyncTimestamp) > staleThreshold;
@@ -4694,6 +4698,9 @@
                 maLicenceChecked     = remoteState.maLicenceChecked || {}; // preserve false values (unticks)
                 maExpiryOverride     = remoteState.maExpiryOverride || {};
                 maLicenceTypeManual  = remoteState.maLicenceTypeManual || {};
+                maVerificationData   = Array.isArray(remoteState.maVerificationData) ? remoteState.maVerificationData : [];
+                maVerificationTimestamp = remoteState.maVerificationTimestamp || 0;
+                maAutoChecked        = remoteState.maAutoChecked || {};
                 // Restore timestamps from remote state
                 const _fts = remoteState.stateTimestamps || {};
                 carNumberTimestamp        = _fts.carNumbers       || 0;
@@ -4708,6 +4715,7 @@
                     navigationMarryEntries,
                     carNumberAssignments, customCarSlots, manualNavMatches,
                     maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
+                    maVerificationData, maVerificationTimestamp, maAutoChecked,
                     stateTimestamps: {
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
@@ -4736,6 +4744,63 @@
                 alert('Force sync failed: ' + e.message);
             } finally {
                 if (btn) { btn.textContent = '↻ Force Sync'; btn.disabled = false; }
+            }
+        }
+
+        // Force-push local state to Dropbox — bypasses the "remote has more rows" guard.
+        // Use when your machine has the most current CSV and others aren't seeing it.
+        async function forcePushToDropbox() {
+            if (csvData.length === 0) { alert('No CSV loaded — nothing to push.'); return; }
+            if (!confirm(
+                'Force Push to Dropbox?\n\n' +
+                'This will overwrite the shared Dropbox file with YOUR local data:\n' +
+                '  ' + csvData.length + ' entries (local)\n\n' +
+                'Only do this if you are sure your data is the most current.\n\n' +
+                'Others will receive your data on their next sync.'
+            )) return;
+            const btn = document.getElementById('dropboxForcePushBtn');
+            if (btn) { btn.textContent = '⏳ Pushing…'; btn.disabled = true; }
+            try {
+                const token = await getValidDropboxToken();
+                if (!token) { alert('Not connected to Dropbox. Please reconnect first.'); return; }
+                // Set a fresh upload timestamp so this push wins any merge comparisons
+                csvUploadTimestamp = Date.now();
+                const state = {
+                    csvData, csvHeaders, csvUploadTimestamp,
+                    docVerified: Object.fromEntries(Object.entries(docVerified).filter(([,v])=>v===true)),
+                    photoIdVerified: Object.fromEntries(Object.entries(photoIdVerified).filter(([,v])=>v===true)),
+                    disclaimerChecked: Object.fromEntries(Object.entries(disclaimerChecked).filter(([,v])=>v===true)),
+                    disclaimerLocked: Object.fromEntries(Object.entries(disclaimerLocked).filter(([,v])=>v===true)),
+                    withdrawn: Array.from(withdrawn), withdrawnAt, restoredAt,
+                    navigationMarryEntries, carNumberAssignments, customCarSlots, manualNavMatches,
+                    maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
+                    maVerificationData, maVerificationTimestamp, maAutoChecked,
+                    stateTimestamps: { carNumbers: carNumberTimestamp, customCarSlots: customCarSlotsTimestamp, manualNavMatches: manualNavMatchesTimestamp },
+                    migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
+                    timestamp: Date.now()
+                };
+                const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token,
+                        'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE, mode: 'overwrite' }),
+                        'Content-Type': 'application/octet-stream'
+                    },
+                    body: JSON.stringify(state)
+                });
+                if (response.ok) {
+                    lastSyncTimestamp = Date.now();
+                    updateDropboxStatus();
+                    localStorage.setItem('adelaideRallyData', JSON.stringify({...state, timestamp: new Date().toISOString()}));
+                    alert('✓ Force Push complete\n\nDropbox updated with ' + csvData.length + ' entries.\n\nOther users will see this data on their next sync (within 5 seconds).');
+                } else {
+                    const err = await response.text();
+                    alert('Push failed: ' + response.status + '\n' + err);
+                }
+            } catch(e) {
+                alert('Force Push failed: ' + e.message);
+            } finally {
+                if (btn) { btn.textContent = '↑ Force Push'; btn.disabled = false; }
             }
         }
 
