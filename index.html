@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.93 - Fix maLicenceTypeManual missing from Dropbox push; guard MA Checks re-render while input focused 2026-08-28 -->
+<!-- Adelaide Rally 2026 Dashboard v3.95 - syncToDropbox is now full pull-merge-push: CSV + all manual state 2026-08-28 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1211,7 +1211,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v3.93';
+        const DASHBOARD_VERSION = 'v3.95';
         let csvData = [];
         let csvHeaders = [];
         let docVerified = {};
@@ -4456,6 +4456,71 @@
                     return;
                 }
 
+                // Pre-push safety check: download current Dropbox CSV row count.
+                // If Dropbox already has MORE rows than local, adopt the remote CSV before
+                // pushing — this prevents a local with fewer entries from overwriting a
+                // larger CSV that another user has already pushed.
+                try {
+                    const preCheckResp = await fetch('https://content.dropboxapi.com/2/files/download', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Dropbox-API-Arg': JSON.stringify({ path: DROPBOX_STATE_FILE })
+                        }
+                    });
+                    if (preCheckResp.ok) {
+                        const remoteState = await preCheckResp.json();
+
+                        // ── CSV: adopt remote if it has more rows or is newer ────────
+                        const remoteCount = (remoteState.csvData || []).length;
+                        const remoteTs    = remoteState.csvUploadTimestamp || 0;
+                        if (remoteCount > csvData.length || (remoteCount === csvData.length && remoteTs > csvUploadTimestamp)) {
+                            csvHeaders         = remoteState.csvHeaders;
+                            csvData            = remoteState.csvData;
+                            csvUploadTimestamp = remoteTs;
+                            console.log('ℹ Pre-push: adopted remote CSV (' + remoteCount + ' rows).');
+                        }
+
+                        // ── Manual state: union-merge so no one's ticks are lost ─────
+                        // Boolean fields: remote true fills any gap in local
+                        const _pt = (rem, loc) => {
+                            if (!rem) return;
+                            Object.entries(rem).forEach(([k, v]) => { if (v === true && !loc[k]) loc[k] = true; });
+                        };
+                        _pt(remoteState.docVerified,       docVerified);
+                        _pt(remoteState.photoIdVerified,   photoIdVerified);
+                        _pt(remoteState.disclaimerChecked, disclaimerChecked);
+                        _pt(remoteState.disclaimerLocked,  disclaimerLocked);
+
+                        // maLicenceChecked: remote true wins unless local has explicitly unticked
+                        if (remoteState.maLicenceChecked) {
+                            Object.entries(remoteState.maLicenceChecked).forEach(([k, v]) => {
+                                if (v === true && maLicenceChecked[k] !== false) maLicenceChecked[k] = true;
+                            });
+                        }
+
+                        // Text overrides: remote fills gaps, local wins on conflict
+                        const _pt2 = (rem, loc) => {
+                            if (!rem) return;
+                            Object.entries(rem).forEach(([k, v]) => { if (v && !loc[k]) loc[k] = v; });
+                        };
+                        _pt2(remoteState.maExpiryOverride,   maExpiryOverride);
+                        _pt2(remoteState.maLicenceTypeManual, maLicenceTypeManual);
+
+                        // Timestamps: max-value merge per entry (latest wins)
+                        const _ptm = (rem, loc) => {
+                            if (!rem) return;
+                            Object.entries(rem).forEach(([k, v]) => { if (!loc[k] || v > loc[k]) loc[k] = v; });
+                        };
+                        _ptm(remoteState.withdrawnAt, withdrawnAt);
+                        _ptm(remoteState.restoredAt,  restoredAt);
+
+                        console.log('ℹ Pre-push: manual state merged from remote.');
+                    }
+                } catch (preErr) {
+                    console.warn('⚠ Pre-push CSV check failed — proceeding with local:', preErr.message);
+                }
+
                 // Strip explicit false values before pushing — only true values should ever
                 // reach Dropbox so the union merge can never be poisoned by a local untick.
                 const _t = obj => Object.fromEntries(Object.entries(obj || {}).filter(([, v]) => v === true));
@@ -4606,13 +4671,17 @@
                             console.log('✓ CSV replaced from Dropbox —', reason,
                                         '| remote ts:', remoteTs, 'local ts:', localTs);
                         } else {
-                            // Local CSV is newer AND has at least as many rows — keep it.
-                            // The uploaded CSV is a complete export from the entry system and
-                            // is the single source of truth for who is entered. Adding rows
-                            // from Dropbox would re-introduce deleted entrants as ghost entries.
-                            // Signal that local is ahead so the sync timer pushes to Dropbox.
-                            localAhead = true;
-                            console.log('✓ Local CSV is newer and has equal/more entries — keeping local (' + csvData.length + ' entries), will push to Dropbox.');
+                            // Local CSV kept. Only mark localAhead if local is STRICTLY ahead
+                            // (newer timestamp or more rows). If they're equal, no push needed —
+                            // pushing equal data would perpetually overwrite Dropbox every 5s,
+                            // which could clobber a freshly-uploaded CSV from another user.
+                            const localStrictlyAhead = localTs > remoteTs || localCount > remoteCount;
+                            if (localStrictlyAhead) {
+                                localAhead = true;
+                                console.log('✓ Local CSV is strictly ahead — keeping local (' + localCount + ' entries), will push to Dropbox.');
+                            } else {
+                                console.log('✓ Local CSV equal to Dropbox (' + localCount + ' entries) — no push needed.');
+                            }
                         }
                     }
 
