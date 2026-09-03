@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v3.95 - syncToDropbox is now full pull-merge-push: CSV + all manual state 2026-08-28 -->
+<!-- Adelaide Rally 2026 Dashboard v4.05 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1091,6 +1091,8 @@
                 </select>
                 <input type="text" id="cnSearch" class="fins" placeholder="Search driver or car #..." style="min-width:180px;" oninput="renderCarNumbers()">
                 <button class="btn-reset" style="background:#16A34A;" onclick="cnToggleInsert()" id="cnInsertBtn" title="Manually insert a car number assignment">➕ Insert</button>
+                <input type="file" id="cnImportInput" accept=".xlsx,.xls" style="display:none" onchange="importCarNumbersFromExcel(this.files[0])">
+                <button class="btn-reset" style="background:#7C3AED;" onclick="document.getElementById('cnImportInput').click()" title="Import car number assignments from an exported Excel file — replaces all current assignments">📥 Import from Excel</button>
             </div>
 
             <!-- Add new car number slot panel -->
@@ -1263,7 +1265,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.04';
+        const DASHBOARD_VERSION = 'v4.05';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -7338,6 +7340,67 @@
         };
 
         // ── Unallocate all ──────────────────────────────────────────────────
+        function importCarNumbersFromExcel(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const wb = XLSX.read(data, { type: 'array' });
+                    const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('car number'));
+                    if (!sheetName) {
+                        alert('⚠ Could not find a "Car Numbers" sheet in this file.\n\nMake sure you are importing an Excel file exported from this dashboard.');
+                        return;
+                    }
+                    const ws = wb.Sheets[sheetName];
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                    if (rows.length < 2) { alert('⚠ The Car Numbers sheet appears to be empty.'); return; }
+                    const headers = rows[0].map(h => String(h).trim().toLowerCase());
+                    const colCarNum    = headers.indexOf('car #');
+                    const colEntryId   = headers.indexOf('entry id');
+                    const colDriverName = headers.indexOf('driver name');
+                    const colStatus    = headers.indexOf('status');
+                    if (colCarNum === -1 || colEntryId === -1) {
+                        alert('⚠ Could not find required columns (Car #, Entry ID).\n\nMake sure you are importing an Excel file exported from this dashboard.');
+                        return;
+                    }
+                    const newAssignments = {};
+                    let assignedCount = 0;
+                    for (let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        const carNum    = String(row[colCarNum]    || '').trim();
+                        const entryId   = String(row[colEntryId]   || '').trim();
+                        const driverName = colDriverName >= 0 ? String(row[colDriverName] || '').trim() : '';
+                        const status    = colStatus >= 0 ? String(row[colStatus] || '').trim().toLowerCase() : '';
+                        if (!carNum) continue;
+                        if (entryId && status !== 'unassigned') {
+                            newAssignments[carNum] = { entryId, driverName };
+                            assignedCount++;
+                        }
+                    }
+                    if (!confirm(
+                        'Import Car Numbers from Excel?\n\n' +
+                        'This will REPLACE all current car number assignments with:\n' +
+                        '  ' + assignedCount + ' assigned car' + (assignedCount !== 1 ? 's' : '') + ' from the Excel file\n\n' +
+                        'Unassigned slots will be cleared. This cannot be undone.'
+                    )) return;
+                    carNumberAssignments = newAssignments;
+                    carNumberTimestamp = Date.now();
+                    saveToStorage();
+                    renderCarNumbers();
+                    syncToDropbox().catch(e => console.warn('⚠ Dropbox save failed:', e));
+                    showMessage('cnMsg', 'success', '✓ Imported ' + assignedCount + ' car number assignment' + (assignedCount !== 1 ? 's' : '') + ' from Excel');
+                } catch(err) {
+                    alert('⚠ Error reading Excel file: ' + err.message);
+                } finally {
+                    // Reset file input so the same file can be re-imported if needed
+                    const inp = document.getElementById('cnImportInput');
+                    if (inp) inp.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
         function cnUnallocateAll() {
             const assignedCount = Object.values(carNumberAssignments).filter(v => v && v.entryId).length;
             if (assignedCount === 0) {
