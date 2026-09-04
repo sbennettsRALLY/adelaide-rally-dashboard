@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.09 - Box Packing tab -->
+<!-- Adelaide Rally 2026 Dashboard v4.10 - Box Packing: add Hats column, fix road books to always 1 -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1312,6 +1312,10 @@
                     <div class="num" id="bpRoadbookTotal">0</div>
                     <div class="lbl">Road Books</div>
                 </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="bpHatTotal">0</div>
+                    <div class="lbl">Hats</div>
+                </div>
             </div>
             <div class="tbl-wrap" style="overflow-x:auto;">
                 <table id="bpTable" style="display:none;font-size:12px;white-space:nowrap;">
@@ -1333,6 +1337,7 @@
                             <th>Nav 5 No.</th>
                             <th>EV Sticker</th>
                             <th>Road Books</th>
+                            <th>Hats</th>
                             <th>Green Wristbands</th>
                             <th>Red Wristbands</th>
                             <th>T-Shirt Driver</th>
@@ -1365,7 +1370,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.09';
+        const DASHBOARD_VERSION = 'v4.10';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6759,7 +6764,7 @@
                 {
                     const bpRows = _buildBoxPackingRows();
                     if (bpRows.length > 0) {
-                        const bpHeaders = ['Car Number','Category','Driver','Driver No.','Nav 1','Nav 1 No.','Nav 2','Nav 2 No.','Nav 3','Nav 3 No.','Nav 4','Nav 4 No.','Nav 5','Nav 5 No.','EV Sticker','Road Books','Green Wrist Bands','Red Wrist Bands','T Shirt Driver','T Shirt Nav 1','T Shirt Nav 2','T Shirt Nav 3','T Shirt Nav 4','T Shirt Nav 5','Phone Cradle','Phone Charger'];
+                        const bpHeaders = ['Car Number','Category','Driver','Driver No.','Nav 1','Nav 1 No.','Nav 2','Nav 2 No.','Nav 3','Nav 3 No.','Nav 4','Nav 4 No.','Nav 5','Nav 5 No.','EV Sticker','Road Books','Hats','Green Wrist Bands','Red Wrist Bands','T Shirt Driver','T Shirt Nav 1','T Shirt Nav 2','T Shirt Nav 3','T Shirt Nav 4','T Shirt Nav 5','Phone Cradle','Phone Charger'];
                         const bpData = [bpHeaders];
                         bpRows.forEach(r => bpData.push([
                             r.carNum, r.category, r.driver, r.driverNo,
@@ -6768,7 +6773,7 @@
                             r.navSlots[2]?.name || '', r.navSlots[2]?.entryId || '',
                             r.navSlots[3]?.name || '', r.navSlots[3]?.entryId || '',
                             r.navSlots[4]?.name || '', r.navSlots[4]?.entryId || '',
-                            r.evSticker, r.roadBooks, r.greenCount, r.redCount,
+                            r.evSticker, r.roadBooks, r.hatCount, r.greenCount, r.redCount,
                             r.drvTshirt,
                             r.navSlots[0]?.addOns.tshirtSize || '',
                             r.navSlots[1]?.addOns.tshirtSize || '',
@@ -8215,9 +8220,12 @@
                     if (ns.addOns.hasSwap) greenCount++; else redCount++;
                 });
 
-                // Road books: 1 standard + 1 per additional navigator beyond the first
-                const navCount = navs.length;
-                const roadBooks = Math.max(1, navCount);
+                // Road books: always 1 per updated rules (extra-nav rule removed)
+                const roadBooks = 1;
+
+                // Hats: 1 per person in car, but TL/TF/STL/STF/PTL/PTF cars get none
+                const isNoHatCar = /^(STL|STF|PTL|PTF|TL|TF)/i.test(String(slot.carNum));
+                const hatCount = isNoHatCar ? 0 : (1 + navs.length);
 
                 // Phone totals
                 let cradleTotal = 0, chargerTotal = 0;
@@ -8229,7 +8237,7 @@
                     if (ns.addOns.hasCharger) chargerTotal++;
                 });
 
-                result.push({ carNum: slot.carNum, category: slot.category || '', driver: drvName, driverNo: driverEntryId, navSlots, evSticker: '', roadBooks, greenCount, redCount, drvTshirt: drvAddOns.tshirtSize, cradleTotal, chargerTotal });
+                result.push({ carNum: slot.carNum, category: slot.category || '', driver: drvName, driverNo: driverEntryId, navSlots, evSticker: '', roadBooks, hatCount, greenCount, redCount, drvTshirt: drvAddOns.tshirtSize, cradleTotal, chargerTotal });
             });
 
             return result;
@@ -8258,12 +8266,13 @@
             );
 
             body.innerHTML = '';
-            let totalGreen = 0, totalRed = 0, totalRoadbooks = 0;
+            let totalGreen = 0, totalRed = 0, totalRoadbooks = 0, totalHats = 0;
 
             rows.forEach(r => {
                 totalGreen     += r.greenCount;
                 totalRed       += r.redCount;
                 totalRoadbooks += r.roadBooks;
+                totalHats      += r.hatCount;
 
                 const tr = document.createElement('tr');
                 const vals = [
@@ -8275,6 +8284,7 @@
                     r.navSlots[4]?.name || '', r.navSlots[4]?.entryId || '',
                     r.evSticker,
                     r.roadBooks || '',
+                    r.hatCount  || '',
                     r.greenCount || '',
                     r.redCount   || '',
                     r.drvTshirt,
@@ -8290,17 +8300,18 @@
                     const td = document.createElement('td');
                     td.textContent = val;
                     if (i === 0) { td.style.fontWeight = '600'; td.style.position = 'sticky'; td.style.left = '0'; td.style.background = '#f8fafc'; td.style.zIndex = '1'; }
-                    if (i === 16 && val > 0) td.style.background = '#DCFCE7';
-                    if (i === 17 && val > 0) td.style.background = '#FEE2E2';
+                    if (i === 17 && val > 0) td.style.background = '#DCFCE7'; // green bands col 17
+                    if (i === 18 && val > 0) td.style.background = '#FEE2E2'; // red bands col 18
                     tr.appendChild(td);
                 });
                 body.appendChild(tr);
             });
 
-            document.getElementById('bpCount').textContent        = rows.length;
-            document.getElementById('bpGreenTotal').textContent   = totalGreen;
-            document.getElementById('bpRedTotal').textContent     = totalRed;
+            document.getElementById('bpCount').textContent         = rows.length;
+            document.getElementById('bpGreenTotal').textContent    = totalGreen;
+            document.getElementById('bpRedTotal').textContent      = totalRed;
             document.getElementById('bpRoadbookTotal').textContent = totalRoadbooks;
+            document.getElementById('bpHatTotal').textContent      = totalHats;
             noData.style.display = rows.length === 0 ? 'block' : 'none';
             tbl.style.display    = rows.length === 0 ? 'none'  : 'table';
         }
@@ -8308,7 +8319,7 @@
         function exportBoxPackingExcel() {
             const rows = _buildBoxPackingRows();
             if (!rows.length) { alert('No packing data to export. Assign car numbers first.'); return; }
-            const headers = ['Car Number','Category','Driver','Driver No.','Nav 1','Nav 1 No.','Nav 2','Nav 2 No.','Nav 3','Nav 3 No.','Nav 4','Nav 4 No.','Nav 5','Nav 5 No.','EV Sticker','Road Books','Green Wrist Bands','Red Wrist Bands','T Shirt Driver','T Shirt Nav 1','T Shirt Nav 2','T Shirt Nav 3','T Shirt Nav 4','T Shirt Nav 5','Phone Cradle','Phone Charger'];
+            const headers = ['Car Number','Category','Driver','Driver No.','Nav 1','Nav 1 No.','Nav 2','Nav 2 No.','Nav 3','Nav 3 No.','Nav 4','Nav 4 No.','Nav 5','Nav 5 No.','EV Sticker','Road Books','Hats','Green Wrist Bands','Red Wrist Bands','T Shirt Driver','T Shirt Nav 1','T Shirt Nav 2','T Shirt Nav 3','T Shirt Nav 4','T Shirt Nav 5','Phone Cradle','Phone Charger'];
             const data = [headers];
             rows.forEach(r => data.push([
                 r.carNum, r.category, r.driver, r.driverNo,
@@ -8317,7 +8328,7 @@
                 r.navSlots[2]?.name || '', r.navSlots[2]?.entryId || '',
                 r.navSlots[3]?.name || '', r.navSlots[3]?.entryId || '',
                 r.navSlots[4]?.name || '', r.navSlots[4]?.entryId || '',
-                r.evSticker, r.roadBooks, r.greenCount, r.redCount,
+                r.evSticker, r.roadBooks, r.hatCount, r.greenCount, r.redCount,
                 r.drvTshirt,
                 r.navSlots[0]?.addOns.tshirtSize || '',
                 r.navSlots[1]?.addOns.tshirtSize || '',
