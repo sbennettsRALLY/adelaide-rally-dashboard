@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.05 -->
+<!-- Adelaide Rally 2026 Dashboard v4.06 - RallySafe tab -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -593,6 +593,7 @@
             <button class="nav-btn" onclick="switchView('withdrawals')">Withdrawals</button>
             <button class="nav-btn" onclick="switchView('csv-data')">Raw Data</button>
             <button class="nav-btn" onclick="switchView('car-numbers')">🔢 Car Numbers</button>
+            <button class="nav-btn" onclick="switchView('rallysafe')">📡 RallySafe</button>
             <button class="nav-btn" onclick="switchView('add-ons')">Add Ons</button>
         </div>
     </div>
@@ -1195,6 +1196,39 @@
         </div>
         <!-- ══ END CAR NUMBERS PAGE ══════════════════════════════════════════ -->
 
+        <!-- ══ RALLYSAFE PAGE ═══════════════════════════════════════════════ -->
+        <div id="rallysafe" class="view">
+            <div id="rsMsg" class="message"></div>
+            <div class="filters" style="margin-bottom:12px; flex-wrap:wrap; gap:8px; align-items:center;">
+                <span style="font-size:13px; font-weight:600; color:#1e3a5f;">RallySafe Data</span>
+                <input type="file" id="rsImportInput" accept=".xlsx,.xls" style="display:none" onchange="importRallySafeFromExcel(this.files[0])">
+                <button class="btn-reset" style="background:#7C3AED;" onclick="document.getElementById('rsImportInput').click()" title="Import RS codes from the completed RallySafe spreadsheet">📥 Import RS Codes</button>
+                <button class="btn-reset" onclick="exportRallySafeExcel()" title="Export RallySafe data in the required submission format">📤 Export for RallySafe</button>
+            </div>
+            <!-- Stat chips -->
+            <div id="rsStats" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;"></div>
+            <!-- Table -->
+            <div style="overflow-x:auto;">
+                <table class="data-table" style="width:100%; font-size:12px;">
+                    <thead>
+                        <tr>
+                            <th>Car #</th>
+                            <th>Category</th>
+                            <th>Driver</th>
+                            <th>DrvCountry</th>
+                            <th>Navigator</th>
+                            <th>NavCountry</th>
+                            <th>Make</th>
+                            <th>Type</th>
+                            <th>RS Code</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- ══ ADD ONS PAGE ══════════════════════════════════════════════════ -->
         <div id="add-ons" class="view">
             <div id="addOnsMsg" class="message"></div>
@@ -1265,7 +1299,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.05';
+        const DASHBOARD_VERSION = 'v4.06';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -1310,6 +1344,7 @@
         let maAutoChecked = {};         // {[entryId]: true/false} — manual override on Auto MA Checks tab
         let navigationMarryEntries = []; // Legacy field — kept for Dropbox backward compat but not used by UI
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
+        let rallySafeCodes = {};       // {carNum: rsCode} — RallySafe codes from provider
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
@@ -4244,6 +4279,8 @@
                 renderWithdrawalTab();
             } else if (viewName === 'car-numbers') {
                 renderCarNumbers();
+            } else if (viewName === 'rallysafe') {
+                renderRallySafe();
             } else if (viewName === 'add-ons') {
                 renderAddOnsTable();
             }
@@ -4304,6 +4341,7 @@
                 maVerificationData,
                 maVerificationTimestamp,
                 maAutoChecked,
+                rallySafeCodes,
                 stateTimestamps: {
                     carNumbers: carNumberTimestamp,
                     customCarSlots: customCarSlotsTimestamp,
@@ -4351,6 +4389,7 @@
                     maVerificationData = data.maVerificationData || [];
                     maVerificationTimestamp = data.maVerificationTimestamp || 0;
                     maAutoChecked = data.maAutoChecked || {};
+                    rallySafeCodes = data.rallySafeCodes || {};
                     const _ts = data.stateTimestamps || {};
                     carNumberTimestamp = _ts.carNumbers || 0;
                     customCarSlotsTimestamp = _ts.customCarSlots || 0;
@@ -4703,6 +4742,7 @@
                 maVerificationData   = Array.isArray(remoteState.maVerificationData) ? remoteState.maVerificationData : [];
                 maVerificationTimestamp = remoteState.maVerificationTimestamp || 0;
                 maAutoChecked        = remoteState.maAutoChecked || {};
+                rallySafeCodes       = remoteState.rallySafeCodes || {};
                 // Restore timestamps from remote state
                 const _fts = remoteState.stateTimestamps || {};
                 carNumberTimestamp        = _fts.carNumbers       || 0;
@@ -4777,6 +4817,7 @@
                     navigationMarryEntries, carNumberAssignments, customCarSlots, manualNavMatches,
                     maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                     maVerificationData, maVerificationTimestamp, maAutoChecked,
+                    rallySafeCodes,
                     stateTimestamps: { carNumbers: carNumberTimestamp, customCarSlots: customCarSlotsTimestamp, manualNavMatches: manualNavMatchesTimestamp },
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
@@ -5522,6 +5563,16 @@
                         }
                     }
 
+                    // Merge rallySafeCodes: last-writer-wins per car number
+                    {
+                        const remRS = remoteState.rallySafeCodes || {};
+                        const mergedRS = { ...rallySafeCodes, ...remRS };
+                        if (JSON.stringify(mergedRS) !== JSON.stringify(rallySafeCodes)) {
+                            rallySafeCodes = mergedRS;
+                            stateUpdated = true;
+                        }
+                    }
+
                     // Always persist the merged state to localStorage so the next page load
                     // starts from the Dropbox-merged snapshot, not the old local-only snapshot.
                     // We write localStorage directly here (not via saveToStorage) to avoid
@@ -5535,6 +5586,7 @@
                             customCarSlots, manualNavMatches,
                             maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                             maVerificationData, maVerificationTimestamp, maAutoChecked,
+                            rallySafeCodes,
                             stateTimestamps: {
                                 carNumbers: carNumberTimestamp,
                                 customCarSlots: customCarSlotsTimestamp,
@@ -6589,7 +6641,33 @@
                     XLSX.utils.book_append_sheet(wb, autoMAWs, 'Auto MA Checks');
                 }
 
-                // ===== SHEET 10: MA Licence CSV (Licence # + Last Name, no headers) =====
+                // ===== SHEET 10: RallySafe =====
+                {
+                    const rsSlots = getEffectiveSlots();
+                    const rsExportData = [['Vehicle','Class','DrvFirstName','DrvSurname','DrvCountry','NavFirstName','NavSurname','NavCountry','Make','Weight','Team','Type','RallySafe No.']];
+                    rsSlots.forEach(slot => {
+                        const assign = carNumberAssignments[slot.carNum];
+                        if (!assign || !assign.entryId) return;
+                        const rsRow = _rsGetRow(assign.entryId);
+                        rsExportData.push([
+                            slot.carNum,
+                            _rsCategory(rsRow) || slot.category || '',
+                            _rsVal(rsRow, 'first / last name', 'first'),
+                            _rsVal(rsRow, 'first / last name', 'last'),
+                            'AUS',
+                            _rsVal(rsRow, "navigator's name", 'first'),
+                            _rsVal(rsRow, "navigator's name", 'last'),
+                            'AUS',
+                            _rsVal(rsRow, 'car make') || _rsVal(rsRow, 'make', 'model'),
+                            '', '', 'RSLite',
+                            rallySafeCodes[slot.carNum] || ''
+                        ]);
+                    });
+                    const rsWs = XLSX.utils.aoa_to_sheet(rsExportData);
+                    XLSX.utils.book_append_sheet(wb, rsWs, 'RallySafe');
+                }
+
+                // ===== SHEET 11: MA Licence CSV (Licence # + Last Name, no headers) =====
                 {
                     const licHoldsIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('do you currently hold a valid motorsport australia licence'));
                     const licNumIdx    = csvHeaders.findIndex(h => h.toLowerCase().includes('motorsport australia licence number'));
@@ -7340,6 +7418,185 @@
         };
 
         // ── Unallocate all ──────────────────────────────────────────────────
+        // ── RallySafe helpers ────────────────────────────────────────────────
+        function _rsGetRow(entryId) {
+            if (!entryId || !csvData.length) return null;
+            const eidIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            if (eidIdx < 0) return null;
+            return csvData.find(r => String(r[eidIdx] || '').trim() === String(entryId).trim()) || null;
+        }
+        function _rsVal(row, ...keywords) {
+            if (!row) return '';
+            const idx = csvHeaders.findIndex(h => {
+                const l = h.toLowerCase();
+                return keywords.every(k => l.includes(k.toLowerCase()));
+            });
+            return idx >= 0 ? String(row[idx] || '').trim() : '';
+        }
+        function _rsCategory(row) {
+            if (!row) return '';
+            const catIdxs = csvHeaders
+                .map((h, i) => ({ h: h.toLowerCase(), i }))
+                .filter(({ h }) => h.includes('i am entering') || h.includes('please select your class'))
+                .map(({ i }) => i);
+            for (const cidx of catIdxs) {
+                const v = String(row[cidx] || '').trim();
+                if (v) return v;
+            }
+            return '';
+        }
+
+        function renderRallySafe() {
+            const slots = getEffectiveSlots();
+            const body  = document.getElementById('rsBody');
+            const stats = document.getElementById('rsStats');
+            if (!body) return;
+
+            let totalWithDriver = 0, withCode = 0, missingCode = 0;
+            const rows = [];
+
+            slots.forEach(slot => {
+                const assign = carNumberAssignments[slot.carNum];
+                const entryId = assign ? assign.entryId : '';
+                const row = entryId ? _rsGetRow(entryId) : null;
+
+                const drvFirst = _rsVal(row, 'first / last name', 'first');
+                const drvLast  = _rsVal(row, 'first / last name', 'last');
+                const navFirst = _rsVal(row, "navigator's name", 'first');
+                const navLast  = _rsVal(row, "navigator's name", 'last');
+                const make     = _rsVal(row, 'car make') || _rsVal(row, 'make', 'model');
+                const category = _rsCategory(row) || slot.category || '';
+                const rsCode   = rallySafeCodes[slot.carNum] || '';
+                const hasDriver = !!(drvFirst || drvLast || assign);
+
+                if (hasDriver) {
+                    totalWithDriver++;
+                    if (rsCode) withCode++; else missingCode++;
+                }
+
+                const statusBadge = rsCode
+                    ? '<span style="background:#16A34A;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✓ Code Issued</span>'
+                    : (hasDriver
+                        ? '<span style="background:#DC2626;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Missing</span>'
+                        : '<span style="background:#9CA3AF;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Unassigned</span>');
+
+                rows.push(`<tr>
+                    <td style="font-weight:600;">${slot.carNum}</td>
+                    <td>${category}</td>
+                    <td>${drvFirst ? drvFirst + ' ' + drvLast : (assign ? assign.driverName || '' : '<em style="color:#9CA3AF;">—</em>')}</td>
+                    <td>AUS</td>
+                    <td>${navFirst ? navFirst + ' ' + navLast : '<em style="color:#9CA3AF;">—</em>'}</td>
+                    <td>AUS</td>
+                    <td>${make || '<em style="color:#9CA3AF;">—</em>'}</td>
+                    <td>RSLite</td>
+                    <td style="font-weight:600;color:#1e3a5f;">${rsCode || '<em style="color:#9CA3AF;">—</em>'}</td>
+                    <td>${statusBadge}</td>
+                </tr>`);
+            });
+
+            body.innerHTML = rows.join('');
+
+            // Stats chips
+            stats.innerHTML = [
+                ['Total Cars', slots.length, '#1e3a5f'],
+                ['Codes Issued', withCode, '#16A34A'],
+                ['Missing Code', missingCode, '#DC2626'],
+            ].map(([label, val, color]) =>
+                `<div style="background:${color};color:#fff;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:default;">
+                    ${label}: ${val}
+                </div>`
+            ).join('');
+        }
+
+        function importRallySafeFromExcel(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    // Accept any sheet that has Vehicle and RallySafe No. columns
+                    let ws = null, sheetName = '';
+                    for (const name of wb.SheetNames) {
+                        const s = wb.Sheets[name];
+                        const data = XLSX.utils.sheet_to_json(s, { header: 1, defval: '' });
+                        if (data.length > 0) {
+                            const hdrs = data[0].map(h => String(h).trim().toLowerCase());
+                            if (hdrs.some(h => h.includes('vehicle') || h.includes('car #')) &&
+                                hdrs.some(h => h.includes('rallysafe') || h.includes('rs code') || h.includes('code'))) {
+                                ws = s; sheetName = name; break;
+                            }
+                        }
+                    }
+                    if (!ws) {
+                        alert('⚠ Could not find a RallySafe sheet with Vehicle and RS Code columns.\n\nMake sure you are importing the spreadsheet returned by the RallySafe provider.');
+                        return;
+                    }
+                    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+                    const hdrs = rows[0].map(h => String(h).trim().toLowerCase());
+                    const colVeh  = hdrs.findIndex(h => h.includes('vehicle') || h === 'car #');
+                    const colCode = hdrs.findIndex(h => h.includes('rallysafe no') || h.includes('rallysafe no.') || h.includes('rs code') || (h.includes('rallysafe') && h.includes('no')));
+                    if (colVeh < 0 || colCode < 0) {
+                        alert('⚠ Could not locate Vehicle and RallySafe No. columns. Check the spreadsheet format.');
+                        return;
+                    }
+                    const imported = {};
+                    let count = 0;
+                    for (let i = 1; i < rows.length; i++) {
+                        const carNum = String(rows[i][colVeh] || '').trim();
+                        const code   = String(rows[i][colCode] || '').trim();
+                        if (carNum && code) { imported[carNum] = code; count++; }
+                    }
+                    if (!confirm(`Import ${count} RS code${count !== 1 ? 's' : ''} from "${sheetName}"?\n\nThis will replace any existing RS codes.`)) return;
+                    rallySafeCodes = imported;
+                    saveToStorage();
+                    renderRallySafe();
+                    showMessage('rsMsg', 'success', `✓ Imported ${count} RS code${count !== 1 ? 's' : ''}`);
+                } catch(err) {
+                    alert('⚠ Error reading file: ' + err.message);
+                } finally {
+                    const inp = document.getElementById('rsImportInput');
+                    if (inp) inp.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function exportRallySafeExcel() {
+            if (!csvData.length) { alert('⚠ No entry data loaded.'); return; }
+            const slots = getEffectiveSlots();
+            const dataRows = [['Vehicle','Class','DrvFirstName','DrvSurname','DrvCountry','NavFirstName','NavSurname','NavCountry','Make','Weight','Team','Type','RallySafe No.']];
+            slots.forEach(slot => {
+                const assign = carNumberAssignments[slot.carNum];
+                if (!assign || !assign.entryId) return; // skip unassigned slots
+                const row = _rsGetRow(assign.entryId);
+                const drvFirst = _rsVal(row, 'first / last name', 'first');
+                const drvLast  = _rsVal(row, 'first / last name', 'last');
+                const navFirst = _rsVal(row, "navigator's name", 'first');
+                const navLast  = _rsVal(row, "navigator's name", 'last');
+                const make     = _rsVal(row, 'car make') || _rsVal(row, 'make', 'model');
+                const category = _rsCategory(row) || slot.category || '';
+                const rsCode   = rallySafeCodes[slot.carNum] || '';
+                dataRows.push([
+                    slot.carNum, category,
+                    drvFirst, drvLast, 'AUS',
+                    navFirst, navLast, 'AUS',
+                    make, '', '', 'RSLite', rsCode
+                ]);
+            });
+            const wb2 = XLSX.utils.book_new();
+            const ws2 = XLSX.utils.aoa_to_sheet(dataRows);
+            XLSX.utils.book_append_sheet(wb2, ws2, 'Entry List Template');
+            const wbout = XLSX.write(wb2, { bookType: 'xlsx', type: 'array' });
+            const blob  = new Blob([wbout], { type: 'application/octet-stream' });
+            const ts    = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `AdelaideRally_RallySafe_${ts}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+        // ── End RallySafe helpers ────────────────────────────────────────────
+
         function importCarNumbersFromExcel(file) {
             if (!file) return;
             const reader = new FileReader();
