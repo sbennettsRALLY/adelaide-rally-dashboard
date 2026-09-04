@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.10 - Box Packing: add Hats column, fix road books to always 1 -->
+<!-- Adelaide Rally 2026 Dashboard v4.11 - RallySafe: exclude TSD, Spirit Tour, Challenge 120/130, Competition/Rally Pro -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1370,7 +1370,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.10';
+        const DASHBOARD_VERSION = 'v4.11';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6721,6 +6721,7 @@
                     rsSlots.forEach(slot => {
                         const assign = carNumberAssignments[slot.carNum];
                         if (!assign || !assign.entryId) return;
+                        if (_rsIsExcluded(slot.category)) return; // skip non-RallySafe categories
                         const rsRow = _rsGetRow(assign.entryId);
                         rsExportData.push([
                             slot.carNum,
@@ -7533,6 +7534,12 @@
             });
             return idx >= 0 ? String(row[idx] || '').trim() : '';
         }
+        const RS_EXCLUDED_CATEGORIES = ['TSD', 'Spirit Tour', 'Challenge 120', 'Challenge 130', 'Competition/Rally Pro'];
+        function _rsIsExcluded(category) {
+            if (!category) return false;
+            return RS_EXCLUDED_CATEGORIES.some(c => category.trim().toLowerCase() === c.toLowerCase());
+        }
+
         function _rsCategory(row) {
             if (!row) return '';
             const catIdxs = csvHeaders
@@ -7566,6 +7573,7 @@
                 const navLast  = _rsVal(row, "navigator's name", 'last');
                 const make     = _rsVal(row, 'vehicle make');
                 const category = slot.category || '';
+                if (_rsIsExcluded(category)) return; // skip non-RallySafe categories
                 const rsCode   = rallySafeCodes[slot.carNum] || '';
                 const hasDriver = !!(drvFirst || drvLast || assign);
 
@@ -7668,13 +7676,14 @@
             slots.forEach(slot => {
                 const assign = carNumberAssignments[slot.carNum];
                 if (!assign || !assign.entryId) return; // skip unassigned slots
+                const category = slot.category || '';
+                if (_rsIsExcluded(category)) return; // skip non-RallySafe categories
                 const row = _rsGetRow(assign.entryId);
                 const drvFirst = _rsVal(row, 'first / last name-first');
                 const drvLast  = _rsVal(row, 'first / last name-last');
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
                 const make     = _rsVal(row, 'vehicle make');
-                const category = slot.category || '';
                 const rsCode   = rallySafeCodes[slot.carNum] || '';
                 dataRows.push([
                     slot.carNum, category,
