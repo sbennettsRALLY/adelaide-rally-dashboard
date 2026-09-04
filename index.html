@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.06 - RallySafe tab -->
+<!-- Adelaide Rally 2026 Dashboard v4.07 - Fix RallySafe driver surname lookup -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1299,7 +1299,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.06';
+        const DASHBOARD_VERSION = 'v4.07';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6652,8 +6652,8 @@
                         rsExportData.push([
                             slot.carNum,
                             _rsCategory(rsRow) || slot.category || '',
-                            _rsVal(rsRow, 'first / last name', 'first'),
-                            _rsVal(rsRow, 'first / last name', 'last'),
+                            _rsVal(rsRow, 'first / last name-first'),
+                            _rsVal(rsRow, 'first / last name-last'),
                             'AUS',
                             _rsVal(rsRow, "navigator's name", 'first'),
                             _rsVal(rsRow, "navigator's name", 'last'),
@@ -7460,8 +7460,8 @@
                 const entryId = assign ? assign.entryId : '';
                 const row = entryId ? _rsGetRow(entryId) : null;
 
-                const drvFirst = _rsVal(row, 'first / last name', 'first');
-                const drvLast  = _rsVal(row, 'first / last name', 'last');
+                const drvFirst = _rsVal(row, 'first / last name-first');
+                const drvLast  = _rsVal(row, 'first / last name-last');
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
                 const make     = _rsVal(row, 'car make') || _rsVal(row, 'make', 'model');
@@ -7569,8 +7569,8 @@
                 const assign = carNumberAssignments[slot.carNum];
                 if (!assign || !assign.entryId) return; // skip unassigned slots
                 const row = _rsGetRow(assign.entryId);
-                const drvFirst = _rsVal(row, 'first / last name', 'first');
-                const drvLast  = _rsVal(row, 'first / last name', 'last');
+                const drvFirst = _rsVal(row, 'first / last name-first');
+                const drvLast  = _rsVal(row, 'first / last name-last');
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
                 const make     = _rsVal(row, 'car make') || _rsVal(row, 'make', 'model');
