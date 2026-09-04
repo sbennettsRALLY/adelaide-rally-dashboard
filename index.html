@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.07 - Fix RallySafe driver surname lookup -->
+<!-- Adelaide Rally 2026 Dashboard v4.08 - RallySafe: class from car numbers tab, make from Vehicle Make column -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1299,7 +1299,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.07';
+        const DASHBOARD_VERSION = 'v4.08';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6651,14 +6651,14 @@
                         const rsRow = _rsGetRow(assign.entryId);
                         rsExportData.push([
                             slot.carNum,
-                            _rsCategory(rsRow) || slot.category || '',
+                            slot.category || '',
                             _rsVal(rsRow, 'first / last name-first'),
                             _rsVal(rsRow, 'first / last name-last'),
                             'AUS',
                             _rsVal(rsRow, "navigator's name", 'first'),
                             _rsVal(rsRow, "navigator's name", 'last'),
                             'AUS',
-                            _rsVal(rsRow, 'car make') || _rsVal(rsRow, 'make', 'model'),
+                            _rsVal(rsRow, 'vehicle make'),
                             '', '', 'RSLite',
                             rallySafeCodes[slot.carNum] || ''
                         ]);
@@ -7464,8 +7464,8 @@
                 const drvLast  = _rsVal(row, 'first / last name-last');
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
-                const make     = _rsVal(row, 'car make') || _rsVal(row, 'make', 'model');
-                const category = _rsCategory(row) || slot.category || '';
+                const make     = _rsVal(row, 'vehicle make');
+                const category = slot.category || '';
                 const rsCode   = rallySafeCodes[slot.carNum] || '';
                 const hasDriver = !!(drvFirst || drvLast || assign);
 
@@ -7573,8 +7573,8 @@
                 const drvLast  = _rsVal(row, 'first / last name-last');
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
-                const make     = _rsVal(row, 'car make') || _rsVal(row, 'make', 'model');
-                const category = _rsCategory(row) || slot.category || '';
+                const make     = _rsVal(row, 'vehicle make');
+                const category = slot.category || '';
                 const rsCode   = rallySafeCodes[slot.carNum] || '';
                 dataRows.push([
                     slot.carNum, category,
