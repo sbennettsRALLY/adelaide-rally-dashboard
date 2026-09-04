@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.08 - RallySafe: class from car numbers tab, make from Vehicle Make column -->
+<!-- Adelaide Rally 2026 Dashboard v4.09 - Box Packing tab -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -595,6 +595,7 @@
             <button class="nav-btn" onclick="switchView('car-numbers')">🔢 Car Numbers</button>
             <button class="nav-btn" onclick="switchView('rallysafe')">📡 RallySafe</button>
             <button class="nav-btn" onclick="switchView('add-ons')">Add Ons</button>
+            <button class="nav-btn" onclick="switchView('box-packing')">📦 Box Packing</button>
         </div>
     </div>
     <div class="main">
@@ -1286,6 +1287,71 @@
         </div>
         <!-- ══ END ADD ONS PAGE ══════════════════════════════════════════════ -->
 
+        <!-- ══ BOX PACKING PAGE ════════════════════════════════════════════════ -->
+        <div id="box-packing" class="view">
+            <div id="bpMsg" class="message"></div>
+            <div class="sec-title">Box Packing List</div>
+            <div class="filters">
+                <input type="text" id="bpSearch" class="fins" placeholder="Search car # or driver..." oninput="renderBoxPacking()" />
+                <button class="btn-reset" style="background:#16A34A;" onclick="exportBoxPackingExcel()">📥 Export Packing List</button>
+            </div>
+            <div class="stat-row">
+                <div class="stat-chip no-click">
+                    <div class="num" id="bpCount">0</div>
+                    <div class="lbl">Cars</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="bpGreenTotal">0</div>
+                    <div class="lbl">Green Wristbands</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="bpRedTotal">0</div>
+                    <div class="lbl">Red Wristbands</div>
+                </div>
+                <div class="stat-chip no-click">
+                    <div class="num" id="bpRoadbookTotal">0</div>
+                    <div class="lbl">Road Books</div>
+                </div>
+            </div>
+            <div class="tbl-wrap" style="overflow-x:auto;">
+                <table id="bpTable" style="display:none;font-size:12px;white-space:nowrap;">
+                    <thead>
+                        <tr>
+                            <th style="position:sticky;left:0;z-index:2;background:#1e293b;">Car #</th>
+                            <th>Category</th>
+                            <th>Driver</th>
+                            <th>Driver No.</th>
+                            <th>Nav 1</th>
+                            <th>Nav 1 No.</th>
+                            <th>Nav 2</th>
+                            <th>Nav 2 No.</th>
+                            <th>Nav 3</th>
+                            <th>Nav 3 No.</th>
+                            <th>Nav 4</th>
+                            <th>Nav 4 No.</th>
+                            <th>Nav 5</th>
+                            <th>Nav 5 No.</th>
+                            <th>EV Sticker</th>
+                            <th>Road Books</th>
+                            <th>Green Wristbands</th>
+                            <th>Red Wristbands</th>
+                            <th>T-Shirt Driver</th>
+                            <th>T-Shirt Nav 1</th>
+                            <th>T-Shirt Nav 2</th>
+                            <th>T-Shirt Nav 3</th>
+                            <th>T-Shirt Nav 4</th>
+                            <th>T-Shirt Nav 5</th>
+                            <th>Phone Cradle</th>
+                            <th>Phone Charger</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bpBody"></tbody>
+                </table>
+            </div>
+            <div id="bpNoData" class="no-data">No data loaded. Please upload a CSV file and assign car numbers.</div>
+        </div>
+        <!-- ══ END BOX PACKING PAGE ═════════════════════════════════════════════ -->
+
     </div>
     <footer>
         Adelaide Rally Entry Management System | Data synced to Dropbox
@@ -1299,7 +1365,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.08';
+        const DASHBOARD_VERSION = 'v4.09';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4283,6 +4349,8 @@
                 renderRallySafe();
             } else if (viewName === 'add-ons') {
                 renderAddOnsTable();
+            } else if (viewName === 'box-packing') {
+                renderBoxPacking();
             }
             // Only scroll to top if this is a manual view switch (not an auto-sync refresh)
             if (scrollToTop) {
@@ -6687,6 +6755,33 @@
                     const maLicCsvWs = XLSX.utils.aoa_to_sheet(maLicCsvData);
                     XLSX.utils.book_append_sheet(wb, maLicCsvWs, 'MA Licence CSV');
                 }
+                // ===== SHEET 12: Box Packing =====
+                {
+                    const bpRows = _buildBoxPackingRows();
+                    if (bpRows.length > 0) {
+                        const bpHeaders = ['Car Number','Category','Driver','Driver No.','Nav 1','Nav 1 No.','Nav 2','Nav 2 No.','Nav 3','Nav 3 No.','Nav 4','Nav 4 No.','Nav 5','Nav 5 No.','EV Sticker','Road Books','Green Wrist Bands','Red Wrist Bands','T Shirt Driver','T Shirt Nav 1','T Shirt Nav 2','T Shirt Nav 3','T Shirt Nav 4','T Shirt Nav 5','Phone Cradle','Phone Charger'];
+                        const bpData = [bpHeaders];
+                        bpRows.forEach(r => bpData.push([
+                            r.carNum, r.category, r.driver, r.driverNo,
+                            r.navSlots[0]?.name || '', r.navSlots[0]?.entryId || '',
+                            r.navSlots[1]?.name || '', r.navSlots[1]?.entryId || '',
+                            r.navSlots[2]?.name || '', r.navSlots[2]?.entryId || '',
+                            r.navSlots[3]?.name || '', r.navSlots[3]?.entryId || '',
+                            r.navSlots[4]?.name || '', r.navSlots[4]?.entryId || '',
+                            r.evSticker, r.roadBooks, r.greenCount, r.redCount,
+                            r.drvTshirt,
+                            r.navSlots[0]?.addOns.tshirtSize || '',
+                            r.navSlots[1]?.addOns.tshirtSize || '',
+                            r.navSlots[2]?.addOns.tshirtSize || '',
+                            r.navSlots[3]?.addOns.tshirtSize || '',
+                            r.navSlots[4]?.addOns.tshirtSize || '',
+                            r.cradleTotal || '', r.chargerTotal || '',
+                        ]));
+                        const bpWs = XLSX.utils.aoa_to_sheet(bpData);
+                        bpWs['!cols'] = bpHeaders.map(h => ({ wch: Math.max(h.length + 2, 12) }));
+                        XLSX.utils.book_append_sheet(wb, bpWs, 'Box Packing');
+                    }
+                }
                 // Add workbook properties to mark file as trusted
                 wb.Props = {
                     Title: 'Adelaide Rally Entry Data',
@@ -8024,6 +8119,223 @@
 
             noData.style.display = totalRows === 0 ? 'block' : 'none';
             tbl.style.display    = totalRows === 0 ? 'none'  : 'table';
+        }
+
+        // ── Box Packing ─────────────────────────────────────────────────────
+        function _buildBoxPackingRows() {
+            if (!csvData.length) return [];
+
+            const entryIdIdx       = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const firstNameIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lastNameIdx      = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const mainEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const phoneIdx         = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+            const nomDrvPhoneIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('driver') && h.toLowerCase().includes('phone'));
+
+            // Add-on column indices
+            const swapConfig    = additionalItemsConfig.find(c => c.item === 'Driver Swap');
+            const tshirtConfig  = additionalItemsConfig.find(c => c.item === 'T-Shirt');
+            const cradleConfig  = additionalItemsConfig.find(c => c.item === 'Phone Cradle');
+            const chargerConfig = additionalItemsConfig.find(c => c.item === 'Phone Charger');
+            const swapIdx    = swapConfig    ? csvHeaders.findIndex(h => h === swapConfig.header)    : -1;
+            const tshirtIdx  = tshirtConfig  ? csvHeaders.findIndex(h => h === tshirtConfig.header)  : -1;
+            const cradleIdx  = cradleConfig  ? csvHeaders.findIndex(h => h === cradleConfig.header)  : -1;
+            const chargerIdx = chargerConfig ? csvHeaders.findIndex(h => h === chargerConfig.header) : -1;
+            const tshirtSizeIdx = csvHeaders.findIndex(h => {
+                const l = h.toLowerCase();
+                return (l.includes('long sleeve') && l.includes('size')) || (l.includes('shirt') && l.includes('size'));
+            });
+
+            function getAddOns(row) {
+                if (!row) return { hasSwap: false, tshirtSize: '', hasCradle: false, hasCharger: false };
+                const hasSwap    = swapIdx    >= 0 && (row[swapIdx]    || '').toLowerCase().trim() === (swapConfig?.trigger    || '').toLowerCase();
+                const hasTshirt  = tshirtIdx  >= 0 && (row[tshirtIdx]  || '').toLowerCase().trim() === (tshirtConfig?.trigger  || '').toLowerCase();
+                const hasCradle  = cradleIdx  >= 0 && (row[cradleIdx]  || '').toLowerCase().trim() === (cradleConfig?.trigger  || '').toLowerCase();
+                const hasCharger = chargerIdx >= 0 && (row[chargerIdx] || '').toLowerCase().trim() === (chargerConfig?.trigger || '').toLowerCase();
+                const tshirtSize = hasTshirt ? (tshirtSizeIdx >= 0 ? (row[tshirtSizeIdx] || '').trim() || '✓' : '✓') : '';
+                return { hasSwap, tshirtSize, hasCradle, hasCharger };
+            }
+
+            // Build entryId → CSV row map
+            const rowByEntryId = {};
+            csvData.forEach(row => {
+                const eid = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (eid) rowByEntryId[eid] = row;
+            });
+
+            // Build navigator pool (all active navigators with their nominated driver phone)
+            const navigators = [];
+            csvData.forEach(row => {
+                const entryId   = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId || withdrawn.has(entryId)) return;
+                const entryType = mainEntryTypeIdx >= 0 ? (row[mainEntryTypeIdx] || '').toLowerCase().trim() : '';
+                if (!entryType.includes('navigator')) return;
+                const phone       = phoneIdx       >= 0 ? (row[phoneIdx]       || '').trim() : '';
+                const nomDrvPhone = nomDrvPhoneIdx >= 0 ? (row[nomDrvPhoneIdx] || '').trim() : '';
+                const first = firstNameIdx >= 0 ? (row[firstNameIdx] || '') : '';
+                const last  = lastNameIdx  >= 0 ? (row[lastNameIdx]  || '') : '';
+                navigators.push({ entryId, name: [first, last].filter(Boolean).join(' '), phone, nominatedDrvPhone: nomDrvPhone, row });
+            });
+
+            const slots = getEffectiveSlots();
+            const result = [];
+
+            slots.forEach(slot => {
+                const assign = carNumberAssignments[slot.carNum];
+                if (!assign || !assign.entryId) return;
+
+                const driverEntryId = String(assign.entryId);
+                const driverRow     = rowByEntryId[driverEntryId] || null;
+                const drvFirst = driverRow && firstNameIdx >= 0 ? (driverRow[firstNameIdx] || '') : '';
+                const drvLast  = driverRow && lastNameIdx  >= 0 ? (driverRow[lastNameIdx]  || '') : '';
+                const drvName  = [drvFirst, drvLast].filter(Boolean).join(' ') || assign.driverName || '';
+                const drvPhone = driverRow && phoneIdx >= 0 ? (driverRow[phoneIdx] || '').trim() : '';
+
+                // Find all navigators for this driver
+                let navs = drvPhone ? navigators.filter(n => n.nominatedDrvPhone && n.nominatedDrvPhone.trim() === drvPhone) : [];
+                // Add manual matches not already included
+                manualNavMatches.forEach(m => {
+                    if (m.driverEntryId !== driverEntryId) return;
+                    if (navs.some(n => n.entryId === m.navigatorEntryId)) return;
+                    const manualNav = navigators.find(n => n.entryId === m.navigatorEntryId);
+                    if (manualNav) navs.push(manualNav);
+                });
+
+                const drvAddOns = getAddOns(driverRow);
+                const navSlots  = Array.from({ length: 5 }, (_, i) => {
+                    const nav = navs[i] || null;
+                    return nav ? { entryId: nav.entryId, name: nav.name, addOns: getAddOns(nav.row) } : null;
+                });
+
+                // Wristbands
+                let greenCount = 1; // driver always green
+                let redCount   = 0;
+                navSlots.forEach(ns => {
+                    if (!ns) return;
+                    if (ns.addOns.hasSwap) greenCount++; else redCount++;
+                });
+
+                // Road books: 1 standard + 1 per additional navigator beyond the first
+                const navCount = navs.length;
+                const roadBooks = Math.max(1, navCount);
+
+                // Phone totals
+                let cradleTotal = 0, chargerTotal = 0;
+                if (drvAddOns.hasCradle)  cradleTotal++;
+                if (drvAddOns.hasCharger) chargerTotal++;
+                navSlots.forEach(ns => {
+                    if (!ns) return;
+                    if (ns.addOns.hasCradle)  cradleTotal++;
+                    if (ns.addOns.hasCharger) chargerTotal++;
+                });
+
+                result.push({ carNum: slot.carNum, category: slot.category || '', driver: drvName, driverNo: driverEntryId, navSlots, evSticker: '', roadBooks, greenCount, redCount, drvTshirt: drvAddOns.tshirtSize, cradleTotal, chargerTotal });
+            });
+
+            return result;
+        }
+
+        function renderBoxPacking() {
+            const body   = document.getElementById('bpBody');
+            const tbl    = document.getElementById('bpTable');
+            const noData = document.getElementById('bpNoData');
+            if (!body) return;
+
+            const hasSlots = getEffectiveSlots().some(s => carNumberAssignments[s.carNum]);
+            if (!csvData.length || !hasSlots) {
+                noData.style.display = 'block';
+                tbl.style.display    = 'none';
+                document.getElementById('bpCount').textContent       = 0;
+                document.getElementById('bpGreenTotal').textContent  = 0;
+                document.getElementById('bpRedTotal').textContent    = 0;
+                document.getElementById('bpRoadbookTotal').textContent = 0;
+                return;
+            }
+
+            const search = ((document.getElementById('bpSearch') || {}).value || '').toLowerCase();
+            const rows   = _buildBoxPackingRows().filter(r =>
+                !search || r.carNum.toString().includes(search) || r.driver.toLowerCase().includes(search)
+            );
+
+            body.innerHTML = '';
+            let totalGreen = 0, totalRed = 0, totalRoadbooks = 0;
+
+            rows.forEach(r => {
+                totalGreen     += r.greenCount;
+                totalRed       += r.redCount;
+                totalRoadbooks += r.roadBooks;
+
+                const tr = document.createElement('tr');
+                const vals = [
+                    r.carNum, r.category, r.driver, r.driverNo,
+                    r.navSlots[0]?.name || '', r.navSlots[0]?.entryId || '',
+                    r.navSlots[1]?.name || '', r.navSlots[1]?.entryId || '',
+                    r.navSlots[2]?.name || '', r.navSlots[2]?.entryId || '',
+                    r.navSlots[3]?.name || '', r.navSlots[3]?.entryId || '',
+                    r.navSlots[4]?.name || '', r.navSlots[4]?.entryId || '',
+                    r.evSticker,
+                    r.roadBooks || '',
+                    r.greenCount || '',
+                    r.redCount   || '',
+                    r.drvTshirt,
+                    r.navSlots[0]?.addOns.tshirtSize || '',
+                    r.navSlots[1]?.addOns.tshirtSize || '',
+                    r.navSlots[2]?.addOns.tshirtSize || '',
+                    r.navSlots[3]?.addOns.tshirtSize || '',
+                    r.navSlots[4]?.addOns.tshirtSize || '',
+                    r.cradleTotal  || '',
+                    r.chargerTotal || '',
+                ];
+                vals.forEach((val, i) => {
+                    const td = document.createElement('td');
+                    td.textContent = val;
+                    if (i === 0) { td.style.fontWeight = '600'; td.style.position = 'sticky'; td.style.left = '0'; td.style.background = '#f8fafc'; td.style.zIndex = '1'; }
+                    if (i === 16 && val > 0) td.style.background = '#DCFCE7';
+                    if (i === 17 && val > 0) td.style.background = '#FEE2E2';
+                    tr.appendChild(td);
+                });
+                body.appendChild(tr);
+            });
+
+            document.getElementById('bpCount').textContent        = rows.length;
+            document.getElementById('bpGreenTotal').textContent   = totalGreen;
+            document.getElementById('bpRedTotal').textContent     = totalRed;
+            document.getElementById('bpRoadbookTotal').textContent = totalRoadbooks;
+            noData.style.display = rows.length === 0 ? 'block' : 'none';
+            tbl.style.display    = rows.length === 0 ? 'none'  : 'table';
+        }
+
+        function exportBoxPackingExcel() {
+            const rows = _buildBoxPackingRows();
+            if (!rows.length) { alert('No packing data to export. Assign car numbers first.'); return; }
+            const headers = ['Car Number','Category','Driver','Driver No.','Nav 1','Nav 1 No.','Nav 2','Nav 2 No.','Nav 3','Nav 3 No.','Nav 4','Nav 4 No.','Nav 5','Nav 5 No.','EV Sticker','Road Books','Green Wrist Bands','Red Wrist Bands','T Shirt Driver','T Shirt Nav 1','T Shirt Nav 2','T Shirt Nav 3','T Shirt Nav 4','T Shirt Nav 5','Phone Cradle','Phone Charger'];
+            const data = [headers];
+            rows.forEach(r => data.push([
+                r.carNum, r.category, r.driver, r.driverNo,
+                r.navSlots[0]?.name || '', r.navSlots[0]?.entryId || '',
+                r.navSlots[1]?.name || '', r.navSlots[1]?.entryId || '',
+                r.navSlots[2]?.name || '', r.navSlots[2]?.entryId || '',
+                r.navSlots[3]?.name || '', r.navSlots[3]?.entryId || '',
+                r.navSlots[4]?.name || '', r.navSlots[4]?.entryId || '',
+                r.evSticker, r.roadBooks, r.greenCount, r.redCount,
+                r.drvTshirt,
+                r.navSlots[0]?.addOns.tshirtSize || '',
+                r.navSlots[1]?.addOns.tshirtSize || '',
+                r.navSlots[2]?.addOns.tshirtSize || '',
+                r.navSlots[3]?.addOns.tshirtSize || '',
+                r.navSlots[4]?.addOns.tshirtSize || '',
+                r.cradleTotal || '', r.chargerTotal || '',
+            ]));
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 12) }));
+            XLSX.utils.book_append_sheet(wb, ws, 'Box Packing');
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob  = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url   = URL.createObjectURL(blob);
+            const a     = document.createElement('a');
+            a.href = url; a.download = 'Adelaide_Rally_Box_Packing.xlsx'; a.click();
+            URL.revokeObjectURL(url);
         }
 
         // ── Render ──────────────────────────────────────────────────────────
