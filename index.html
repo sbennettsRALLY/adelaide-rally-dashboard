@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Adelaide Rally 2026 Dashboard v4.11 - RallySafe: exclude TSD, Spirit Tour, Challenge 120/130, Competition/Rally Pro -->
+<!-- Adelaide Rally 2026 Dashboard v4.13 - RallySafe: show excluded categories as N/A rows -->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1220,6 +1220,7 @@
                             <th>Navigator</th>
                             <th>NavCountry</th>
                             <th>Make</th>
+                            <th>Model</th>
                             <th>Type</th>
                             <th>RS Code</th>
                             <th>Status</th>
@@ -1370,7 +1371,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.11';
+        const DASHBOARD_VERSION = 'v4.13';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6717,15 +6718,19 @@
                 // ===== SHEET 10: RallySafe =====
                 {
                     const rsSlots = getEffectiveSlots();
-                    const rsExportData = [['Vehicle','Class','DrvFirstName','DrvSurname','DrvCountry','NavFirstName','NavSurname','NavCountry','Make','Weight','Team','Type','RallySafe No.']];
+                    const rsExportData = [['Vehicle','Class','DrvFirstName','DrvSurname','DrvCountry','NavFirstName','NavSurname','NavCountry','Make','Model','Weight','Team','Type','RallySafe No.']];
                     rsSlots.forEach(slot => {
                         const assign = carNumberAssignments[slot.carNum];
                         if (!assign || !assign.entryId) return;
-                        if (_rsIsExcluded(slot.category)) return; // skip non-RallySafe categories
                         const rsRow = _rsGetRow(assign.entryId);
+                        const rsCat = slot.category || '';
+                        if (_rsIsExcluded(rsCat)) {
+                            rsExportData.push([slot.carNum, rsCat, _rsVal(rsRow,'first / last name-first'), _rsVal(rsRow,'first / last name-last'), 'AUS', _rsVal(rsRow,"navigator's name",'first'), _rsVal(rsRow,"navigator's name",'last'), 'AUS', _rsVal(rsRow,'vehicle make'), _rsVal(rsRow,'vehicle model'), '', '', 'RallySafe', 'NA']);
+                            return;
+                        }
                         rsExportData.push([
                             slot.carNum,
-                            slot.category || '',
+                            rsCat,
                             _rsVal(rsRow, 'first / last name-first'),
                             _rsVal(rsRow, 'first / last name-last'),
                             'AUS',
@@ -6733,6 +6738,7 @@
                             _rsVal(rsRow, "navigator's name", 'last'),
                             'AUS',
                             _rsVal(rsRow, 'vehicle make'),
+                            _rsVal(rsRow, 'vehicle model'),
                             '', '', 'RSLite',
                             rallySafeCodes[slot.carNum] || ''
                         ]);
@@ -7559,7 +7565,7 @@
             const stats = document.getElementById('rsStats');
             if (!body) return;
 
-            let totalWithDriver = 0, withCode = 0, missingCode = 0;
+            let totalWithDriver = 0, withCode = 0, missingCode = 0, noCodeNeeded = 0;
             const rows = [];
 
             slots.forEach(slot => {
@@ -7572,11 +7578,32 @@
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
                 const make     = _rsVal(row, 'vehicle make');
+                const model    = _rsVal(row, 'vehicle model');
                 const category = slot.category || '';
-                if (_rsIsExcluded(category)) return; // skip non-RallySafe categories
-                const rsCode   = rallySafeCodes[slot.carNum] || '';
+                const excluded = _rsIsExcluded(category);
                 const hasDriver = !!(drvFirst || drvLast || assign);
 
+                if (excluded) {
+                    // Non-RallySafe category — show as N/A (green/complete)
+                    if (hasDriver) noCodeNeeded++;
+                    const naStatus = '<span style="background:#16A34A;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✓ N/A</span>';
+                    rows.push(`<tr style="opacity:0.75;">
+                        <td style="font-weight:600;">${slot.carNum}</td>
+                        <td>${category}</td>
+                        <td>${drvFirst ? drvFirst + ' ' + drvLast : (assign ? assign.driverName || '' : '<em style="color:#9CA3AF;">—</em>')}</td>
+                        <td>AUS</td>
+                        <td>${navFirst ? navFirst + ' ' + navLast : '<em style="color:#9CA3AF;">—</em>'}</td>
+                        <td>AUS</td>
+                        <td>${make || '<em style="color:#9CA3AF;">—</em>'}</td>
+                        <td>${model || '<em style="color:#9CA3AF;">—</em>'}</td>
+                        <td>RallySafe</td>
+                        <td style="color:#6B7280;">NA</td>
+                        <td>${naStatus}</td>
+                    </tr>`);
+                    return;
+                }
+
+                const rsCode = rallySafeCodes[slot.carNum] || '';
                 if (hasDriver) {
                     totalWithDriver++;
                     if (rsCode) withCode++; else missingCode++;
@@ -7596,6 +7623,7 @@
                     <td>${navFirst ? navFirst + ' ' + navLast : '<em style="color:#9CA3AF;">—</em>'}</td>
                     <td>AUS</td>
                     <td>${make || '<em style="color:#9CA3AF;">—</em>'}</td>
+                    <td>${model || '<em style="color:#9CA3AF;">—</em>'}</td>
                     <td>RSLite</td>
                     <td style="font-weight:600;color:#1e3a5f;">${rsCode || '<em style="color:#9CA3AF;">—</em>'}</td>
                     <td>${statusBadge}</td>
@@ -7609,6 +7637,7 @@
                 ['Total Cars', slots.length, '#1e3a5f'],
                 ['Codes Issued', withCode, '#16A34A'],
                 ['Missing Code', missingCode, '#DC2626'],
+                ['No Code Needed', noCodeNeeded, '#6B7280'],
             ].map(([label, val, color]) =>
                 `<div style="background:${color};color:#fff;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:default;">
                     ${label}: ${val}
@@ -7672,24 +7701,28 @@
         function exportRallySafeExcel() {
             if (!csvData.length) { alert('⚠ No entry data loaded.'); return; }
             const slots = getEffectiveSlots();
-            const dataRows = [['Vehicle','Class','DrvFirstName','DrvSurname','DrvCountry','NavFirstName','NavSurname','NavCountry','Make','Weight','Team','Type','RallySafe No.']];
+            const dataRows = [['Vehicle','Class','DrvFirstName','DrvSurname','DrvCountry','NavFirstName','NavSurname','NavCountry','Make','Model','Weight','Team','Type','RallySafe No.']];
             slots.forEach(slot => {
                 const assign = carNumberAssignments[slot.carNum];
                 if (!assign || !assign.entryId) return; // skip unassigned slots
                 const category = slot.category || '';
-                if (_rsIsExcluded(category)) return; // skip non-RallySafe categories
                 const row = _rsGetRow(assign.entryId);
                 const drvFirst = _rsVal(row, 'first / last name-first');
                 const drvLast  = _rsVal(row, 'first / last name-last');
                 const navFirst = _rsVal(row, "navigator's name", 'first');
                 const navLast  = _rsVal(row, "navigator's name", 'last');
                 const make     = _rsVal(row, 'vehicle make');
-                const rsCode   = rallySafeCodes[slot.carNum] || '';
+                const model    = _rsVal(row, 'vehicle model');
+                if (_rsIsExcluded(category)) {
+                    dataRows.push([slot.carNum, category, drvFirst, drvLast, 'AUS', navFirst, navLast, 'AUS', make, model, '', '', 'RallySafe', 'NA']);
+                    return;
+                }
+                const rsCode = rallySafeCodes[slot.carNum] || '';
                 dataRows.push([
                     slot.carNum, category,
                     drvFirst, drvLast, 'AUS',
                     navFirst, navLast, 'AUS',
-                    make, '', '', 'RSLite', rsCode
+                    make, model, '', '', 'RSLite', rsCode
                 ]);
             });
             const wb2 = XLSX.utils.book_new();
