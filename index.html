@@ -1371,7 +1371,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.15';
+        const DASHBOARD_VERSION = 'v4.16';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4464,6 +4464,12 @@
                     maVerificationTimestamp = data.maVerificationTimestamp || 0;
                     maAutoChecked = data.maAutoChecked || {};
                     rallySafeCodes = data.rallySafeCodes || {};
+                // Migration v4.15: Prima Tour entrants renamed from '1'–'60' to 'PT1'–'PT60'
+                for (let _mn = 1; _mn <= 60; _mn++) {
+                    const _mo = String(_mn), _mn2 = 'PT' + _mn;
+                    if (carNumberAssignments[_mo] !== undefined) { carNumberAssignments[_mn2] = carNumberAssignments[_mo]; delete carNumberAssignments[_mo]; }
+                    if (rallySafeCodes[_mo] !== undefined) { rallySafeCodes[_mn2] = rallySafeCodes[_mo]; delete rallySafeCodes[_mo]; }
+                }
                     const _ts = data.stateTimestamps || {};
                     carNumberTimestamp = _ts.carNumbers || 0;
                     customCarSlotsTimestamp = _ts.customCarSlots || 0;
@@ -4817,6 +4823,12 @@
                 maVerificationTimestamp = remoteState.maVerificationTimestamp || 0;
                 maAutoChecked        = remoteState.maAutoChecked || {};
                 rallySafeCodes       = remoteState.rallySafeCodes || {};
+                // Migration v4.15: Prima Tour entrants renamed from '1'–'60' to 'PT1'–'PT60'
+                for (let _mn = 1; _mn <= 60; _mn++) {
+                    const _mo = String(_mn), _mn2 = 'PT' + _mn;
+                    if (carNumberAssignments[_mo] !== undefined) { carNumberAssignments[_mn2] = carNumberAssignments[_mo]; delete carNumberAssignments[_mo]; }
+                    if (rallySafeCodes[_mo] !== undefined) { rallySafeCodes[_mn2] = rallySafeCodes[_mo]; delete rallySafeCodes[_mo]; }
+                }
                 // Restore timestamps from remote state
                 const _fts = remoteState.stateTimestamps || {};
                 carNumberTimestamp        = _fts.carNumbers       || 0;
