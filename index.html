@@ -1371,7 +1371,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.17';
+        const DASHBOARD_VERSION = 'v4.18';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -8268,7 +8268,7 @@
 
                 // Wristbands
                 let greenCount = 1; // driver always green
-                let redCount   = 0;
+                let redCount   = navs.length === 0 ? 1 : 0; // no nav entered → assume 1 red for incoming nav
                 navSlots.forEach(ns => {
                     if (!ns) return;
                     if (ns.addOns.hasSwap) greenCount++; else redCount++;
