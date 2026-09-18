@@ -1371,7 +1371,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.16';
+        const DASHBOARD_VERSION = 'v4.17';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -8277,9 +8277,9 @@
                 // Road books: always 1 per updated rules (extra-nav rule removed)
                 const roadBooks = 1;
 
-                // Hats: 1 per person in car, but TL/TF/STL/STF/PTL/PTF cars get none
-                const isNoHatCar = /^(STL|STF|PTL|PTF|TL|TF)/i.test(String(slot.carNum));
-                const hatCount = isNoHatCar ? 0 : (1 + navs.length);
+                // Hats: tour leaders/followers get 2; all other entrants get 1 per person
+                const isTourLdrFlr = /^(STL|STF|PTL|PTF|TL|TF)/i.test(String(slot.carNum));
+                const hatCount = isTourLdrFlr ? 2 : (1 + navs.length);
 
                 // Phone totals
                 let cradleTotal = 0, chargerTotal = 0;
