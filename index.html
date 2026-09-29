@@ -1371,11 +1371,12 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.18';
+        const DASHBOARD_VERSION = 'v4.19';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
             'Speed':                               {d:1,n:1},
+            'Single Event Speed':                  {d:1,n:1},
             'Circuit Provisional':                 {d:1,n:1},
             'Circuit':                             {d:1,n:1},
             'Rally Navigator':                     {d:0,n:2},
@@ -3018,10 +3019,13 @@
                 const ratingObj = MA_LICENCE_RATINGS[lt];
                 if (!ratingObj) return; // unknown licence type — skip
                 const rating = ratingObj[roleKey];
-                // Parse expiry
+                // Parse expiry — supports DD/MM/YYYY (MA report format) and ISO/US fallback
                 const expStr = (rec.LicenceExpiry || '').trim();
                 if (!expStr) return;
-                const expDate = new Date(expStr);
+                let expDate;
+                const dmyMatch = expStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (dmyMatch) { expDate = new Date(parseInt(dmyMatch[3]), parseInt(dmyMatch[2]) - 1, parseInt(dmyMatch[1])); }
+                else { expDate = new Date(expStr); }
                 if (isNaN(expDate.getTime())) return;
                 // Must not be expired before event date
                 if (expDate < MA_EVENT_DATE) return;
