@@ -3204,15 +3204,18 @@
                 tr.style.background = maAutoChecked[eid] ? '#f0fdf4' : style.bg;
                 tr.title = result.statusDetail || '';
 
-                // Format expiry for display
+                // Format expiry for display — handle DD/MM/YYYY (MA report) and ISO/US fallback
                 let expiryDisplay = result.expiry || '—';
                 if (expiryDisplay && expiryDisplay !== '—') {
                     try {
-                        const d = new Date(expiryDisplay);
+                        let d;
+                        const _dm = expiryDisplay.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                        if (_dm) { d = new Date(parseInt(_dm[3]), parseInt(_dm[2])-1, parseInt(_dm[1])); }
+                        else { d = new Date(expiryDisplay); }
                         if (!isNaN(d.getTime())) {
-                            const dd = String(d.getUTCDate()).padStart(2,'0');
-                            const mm = String(d.getUTCMonth()+1).padStart(2,'0');
-                            const yy = d.getUTCFullYear();
+                            const dd = String(d.getDate()).padStart(2,'0');
+                            const mm = String(d.getMonth()+1).padStart(2,'0');
+                            const yy = d.getFullYear();
                             expiryDisplay = dd+'/'+mm+'/'+yy;
                         }
                     } catch(e) {}
