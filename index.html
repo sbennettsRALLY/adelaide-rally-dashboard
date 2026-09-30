@@ -1369,7 +1369,11 @@
                 </select>
                 <button class="btn-reset" style="background:#16A34A;" onclick="exportEntryListExcel()">📥 Export Entry List</button>
             </div>
-            <div style="overflow-x:auto;">
+            <!-- Top scroll mirror -->
+            <div id="elScrollTop" style="overflow-x:auto;overflow-y:hidden;height:16px;margin-bottom:2px;">
+                <div id="elScrollPhantom" style="height:1px;"></div>
+            </div>
+            <div id="elScrollOuter" style="overflow-x:auto;">
                 <table id="elTable" style="display:none;font-size:11px;white-space:nowrap;border-collapse:collapse;">
                     <thead>
                         <tr style="background:#1e293b;color:#fff;font-size:11px;">
@@ -1408,18 +1412,12 @@
                             <th style="padding:6px 8px;">Car Model</th>
                             <th style="padding:6px 8px;">Car Colour</th>
                             <th style="padding:6px 8px;">Car CC</th>
-                            <th style="padding:6px 8px;">Drv EC Name</th>
-                            <th style="padding:6px 8px;">Drv EC Phone</th>
-                            <th style="padding:6px 8px;">Nav 1 EC Name</th>
-                            <th style="padding:6px 8px;">Nav 1 EC Phone</th>
-                            <th style="padding:6px 8px;">Nav 2 EC Name</th>
-                            <th style="padding:6px 8px;">Nav 2 EC Phone</th>
-                            <th style="padding:6px 8px;">Nav 3 EC Name</th>
-                            <th style="padding:6px 8px;">Nav 3 EC Phone</th>
-                            <th style="padding:6px 8px;">Nav 4 EC Name</th>
-                            <th style="padding:6px 8px;">Nav 4 EC Phone</th>
-                            <th style="padding:6px 8px;">Nav 5 EC Name</th>
-                            <th style="padding:6px 8px;">Nav 5 EC Phone</th>
+                            <th style="padding:6px 8px;">Driver EC</th>
+                            <th style="padding:6px 8px;">Nav 1 EC</th>
+                            <th style="padding:6px 8px;">Nav 2 EC</th>
+                            <th style="padding:6px 8px;">Nav 3 EC</th>
+                            <th style="padding:6px 8px;">Nav 4 EC</th>
+                            <th style="padding:6px 8px;">Nav 5 EC</th>
                         </tr>
                     </thead>
                     <tbody id="elTbody"></tbody>
@@ -1442,7 +1440,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.20';
+        const DASHBOARD_VERSION = 'v4.21';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -8519,12 +8517,11 @@
             function _getName(row) { return [_getVal(row, firstNameIdx), _getVal(row, lastNameIdx)].filter(Boolean).join(' '); }
             function _hasSwap(row) { return swapIdx >= 0 && row && (row[swapIdx] || '').toLowerCase().trim() === (swapConfig?.trigger || '').toLowerCase(); }
             function _ecName(row, fIdx, lIdx) { return [_getVal(row, fIdx), _getVal(row, lIdx)].filter(Boolean).join(' '); }
-            function _ecCombined(row, f1, l1, ph1, f2, l2, ph2) {
-                const n1 = _ecName(row, f1, l1), p1 = _getVal(row, ph1);
-                const n2 = _ecName(row, f2, l2), p2 = _getVal(row, ph2);
-                const name = [n1, n2].filter(Boolean).join(' / ');
-                const phone = [p1, p2].filter(Boolean).join(' / ');
-                return { name, phone };
+            // Returns a single combined EC string: "FirstName LastName Phone"
+            function _ecSingle(row, fIdx, lIdx, phIdx) {
+                const name  = _ecName(row, fIdx, lIdx);
+                const phone = _getVal(row, phIdx);
+                return [name, phone].filter(Boolean).join(' ');
             }
 
             // Build entryId → CSV row map
@@ -8572,11 +8569,9 @@
                 // Nav 1 shared nav flag
                 const sharedNav = navs.length > 0 && _hasSwap(navs[0].row) ? 'Yes' : 'No';
 
-                // Emergency contacts (driver)
-                const drvEC = _ecCombined(driverRow, ec1FIdx, ec1LIdx, ec1PhIdx, ec2FIdx, ec2LIdx, ec2PhIdx);
-
-                // Per-nav emergency contacts
-                const navEC = navs.map(n => _ecCombined(n.row, ec1FIdx, ec1LIdx, ec1PhIdx, ec2FIdx, ec2LIdx, ec2PhIdx));
+                // Emergency contacts — single combined string per person (EC1 name + phone)
+                const drvEC  = _ecSingle(driverRow, ec1FIdx, ec1LIdx, ec1PhIdx);
+                const navECs = navs.map(n => _ecSingle(n.row, ec1FIdx, ec1LIdx, ec1PhIdx));
 
                 result.push({
                     carNum:      slot.carNum,
@@ -8585,7 +8580,7 @@
                     driverName:  drvName,
                     category:    slot.category || '',
                     navs,
-                    navEC,
+                    navECs,
                     sharedDriver,
                     sharedNav,
                     sharedDrive: sharedDrive || 'No',
@@ -8596,8 +8591,7 @@
                     carModel:    _getVal(driverRow, carModelIdx),
                     carColour:   _getVal(driverRow, carColourIdx),
                     carCC:       _getVal(driverRow, carCCIdx),
-                    drvECName:   drvEC.name,
-                    drvECPhone:  drvEC.phone,
+                    drvEC,
                 });
             });
 
@@ -8605,9 +8599,12 @@
         }
 
         function renderEntryList() {
-            const tbl    = document.getElementById('elTable');
-            const tbody  = document.getElementById('elTbody');
-            const noData = document.getElementById('elNoData');
+            const tbl      = document.getElementById('elTable');
+            const tbody    = document.getElementById('elTbody');
+            const noData   = document.getElementById('elNoData');
+            const outer    = document.getElementById('elScrollOuter');
+            const topBar   = document.getElementById('elScrollTop');
+            const phantom  = document.getElementById('elScrollPhantom');
             if (!tbl || !tbody || !noData) return;
 
             if (!csvData.length || !Object.keys(carNumberAssignments).length) {
@@ -8638,67 +8635,42 @@
                     r.drvEmail, r.drvPhone].join(' ').toLowerCase();
                 if (search && !allText.includes(search)) return;
 
-                const n = i => r.navs[i] || null;
-                const ne = i => r.navEC[i] || {name:'',phone:''};
+                const n  = i => r.navs[i] || null;
+                const ne = i => r.navECs[i] || '';
                 const cell = v => `<td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">${v || ''}</td>`;
 
                 const tr = document.createElement('tr');
                 tr.style.background = ri % 2 === 0 ? '#fff' : '#f8fafc';
                 tr.innerHTML =
-                    cell(r.carNum) +
-                    cell(r.rsCode) +
-                    cell(r.driverNo) +
-                    cell(r.driverName) +
-                    cell(r.category) +
-                    cell(n(0)?.entryId || '') +
-                    cell(n(0)?.name || '') +
-                    cell(n(1)?.entryId || '') +
-                    cell(n(1)?.name || '') +
-                    cell(n(2)?.entryId || '') +
-                    cell(n(2)?.name || '') +
-                    cell(n(3)?.entryId || '') +
-                    cell(n(3)?.name || '') +
-                    cell(n(4)?.entryId || '') +
-                    cell(n(4)?.name || '') +
-                    cell(r.sharedDriver) +
-                    cell(r.sharedNav) +
-                    cell(r.sharedDrive) +
-                    cell(r.drvEmail) +
-                    cell(r.drvPhone) +
-                    cell(n(0)?.email || '') +
-                    cell(n(0)?.phone || '') +
-                    cell(n(1)?.email || '') +
-                    cell(n(1)?.phone || '') +
-                    cell(n(2)?.email || '') +
-                    cell(n(2)?.phone || '') +
-                    cell(n(3)?.email || '') +
-                    cell(n(3)?.phone || '') +
-                    cell(n(4)?.email || '') +
-                    cell(n(4)?.phone || '') +
-                    cell(r.carYear) +
-                    cell(r.carMake) +
-                    cell(r.carModel) +
-                    cell(r.carColour) +
-                    cell(r.carCC) +
-                    cell(r.drvECName) +
-                    cell(r.drvECPhone) +
-                    cell(ne(0).name) +
-                    cell(ne(0).phone) +
-                    cell(ne(1).name) +
-                    cell(ne(1).phone) +
-                    cell(ne(2).name) +
-                    cell(ne(2).phone) +
-                    cell(ne(3).name) +
-                    cell(ne(3).phone) +
-                    cell(ne(4).name) +
-                    cell(ne(4).phone);
+                    cell(r.carNum) + cell(r.rsCode) + cell(r.driverNo) + cell(r.driverName) + cell(r.category) +
+                    cell(n(0)?.entryId||'') + cell(n(0)?.name||'') +
+                    cell(n(1)?.entryId||'') + cell(n(1)?.name||'') +
+                    cell(n(2)?.entryId||'') + cell(n(2)?.name||'') +
+                    cell(n(3)?.entryId||'') + cell(n(3)?.name||'') +
+                    cell(n(4)?.entryId||'') + cell(n(4)?.name||'') +
+                    cell(r.sharedDriver) + cell(r.sharedNav) + cell(r.sharedDrive) +
+                    cell(r.drvEmail) + cell(r.drvPhone) +
+                    cell(n(0)?.email||'') + cell(n(0)?.phone||'') +
+                    cell(n(1)?.email||'') + cell(n(1)?.phone||'') +
+                    cell(n(2)?.email||'') + cell(n(2)?.phone||'') +
+                    cell(n(3)?.email||'') + cell(n(3)?.phone||'') +
+                    cell(n(4)?.email||'') + cell(n(4)?.phone||'') +
+                    cell(r.carYear) + cell(r.carMake) + cell(r.carModel) + cell(r.carColour) + cell(r.carCC) +
+                    cell(r.drvEC) + cell(ne(0)) + cell(ne(1)) + cell(ne(2)) + cell(ne(3)) + cell(ne(4));
                 tbody.appendChild(tr);
                 shown++;
             });
 
             tbl.style.display = shown > 0 ? '' : 'none';
             noData.style.display = shown === 0 ? 'block' : 'none';
-            if (shown === 0) noData.querySelector ? (noData.textContent = 'No entries match the current filter.') : null;
+
+            // Sync top scrollbar phantom width and wire up bidirectional scroll
+            if (outer && topBar && phantom && shown > 0) {
+                phantom.style.width = tbl.scrollWidth + 'px';
+                let _sync = false;
+                outer.onscroll = () => { if (!_sync) { _sync=true; topBar.scrollLeft = outer.scrollLeft; _sync=false; } };
+                topBar.onscroll = () => { if (!_sync) { _sync=true; outer.scrollLeft = topBar.scrollLeft; _sync=false; } };
+            }
         }
 
         function exportEntryListExcel() {
@@ -8715,17 +8687,12 @@
                 'Nav 3 Email','Nav 3 Phone','Nav 4 Email','Nav 4 Phone',
                 'Nav 5 Email','Nav 5 Phone',
                 'Car Year','Car Make','Car Model','Car Colour','Car CC',
-                'Driver EC Name','Driver EC Phone',
-                'Nav 1 EC Name','Nav 1 EC Phone',
-                'Nav 2 EC Name','Nav 2 EC Phone',
-                'Nav 3 EC Name','Nav 3 EC Phone',
-                'Nav 4 EC Name','Nav 4 EC Phone',
-                'Nav 5 EC Name','Nav 5 EC Phone',
+                'Driver EC','Nav 1 EC','Nav 2 EC','Nav 3 EC','Nav 4 EC','Nav 5 EC',
             ];
             const data = [headers];
             rows.forEach(r => {
                 const n  = i => r.navs[i] || null;
-                const ne = i => r.navEC[i] || {name:'',phone:''};
+                const ne = i => r.navECs[i] || '';
                 data.push([
                     r.carNum, r.rsCode, r.driverNo, r.driverName, r.category,
                     n(0)?.entryId||'', n(0)?.name||'',
@@ -8741,12 +8708,7 @@
                     n(3)?.email||'', n(3)?.phone||'',
                     n(4)?.email||'', n(4)?.phone||'',
                     r.carYear, r.carMake, r.carModel, r.carColour, r.carCC,
-                    r.drvECName, r.drvECPhone,
-                    ne(0).name, ne(0).phone,
-                    ne(1).name, ne(1).phone,
-                    ne(2).name, ne(2).phone,
-                    ne(3).name, ne(3).phone,
-                    ne(4).name, ne(4).phone,
+                    r.drvEC, ne(0), ne(1), ne(2), ne(3), ne(4),
                 ]);
             });
             const wb  = XLSX.utils.book_new();
