@@ -1440,7 +1440,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.21';
+        const DASHBOARD_VERSION = 'v4.22';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -8501,12 +8501,12 @@
             const carColourIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle colour'));
             const carCCIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('engine capacity'));
 
-            // Emergency contacts (driver/entrant — up to 2 contacts)
-            const ec1FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().includes('first'));
-            const ec1LIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().includes('last'));
+            // Emergency contacts — match suffix -First / -Last to avoid "First / Last Name-First" matching both
+            const ec1FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().endsWith('-first'));
+            const ec1LIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().endsWith('-last'));
             const ec1PhIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().includes('phone'));
-            const ec2FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().includes('first'));
-            const ec2LIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().includes('last'));
+            const ec2FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().endsWith('-first'));
+            const ec2LIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().endsWith('-last'));
             const ec2PhIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().includes('phone'));
 
             // Add-on indices
