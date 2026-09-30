@@ -596,6 +596,7 @@
             <button class="nav-btn" onclick="switchView('rallysafe')">📡 RallySafe</button>
             <button class="nav-btn" onclick="switchView('add-ons')">Add Ons</button>
             <button class="nav-btn" onclick="switchView('box-packing')">📦 Box Packing</button>
+            <button class="nav-btn" onclick="switchView('entry-list')">📋 Entry List</button>
         </div>
     </div>
     <div class="main">
@@ -1358,6 +1359,76 @@
         </div>
         <!-- ══ END BOX PACKING PAGE ═════════════════════════════════════════════ -->
 
+        <!-- ══ ENTRY LIST PAGE ══════════════════════════════════════════════════ -->
+        <div id="entry-list" class="view">
+            <div class="sec-title">Entry List</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+                <input type="text" id="elSearch" class="fins" placeholder="Search car #, driver, navigator…" oninput="renderEntryList()" style="flex:1;min-width:200px;" />
+                <select id="elCatFilter" class="fins" style="flex:0 0 auto;width:auto;min-width:140px;" onchange="renderEntryList()">
+                    <option value="">All Categories</option>
+                </select>
+                <button class="btn-reset" style="background:#16A34A;" onclick="exportEntryListExcel()">📥 Export Entry List</button>
+            </div>
+            <div style="overflow-x:auto;">
+                <table id="elTable" style="display:none;font-size:11px;white-space:nowrap;border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#1e293b;color:#fff;font-size:11px;">
+                            <th style="padding:6px 8px;">Car #</th>
+                            <th style="padding:6px 8px;">RS Code</th>
+                            <th style="padding:6px 8px;">Drv Entry #</th>
+                            <th style="padding:6px 8px;">Driver Name</th>
+                            <th style="padding:6px 8px;">Category</th>
+                            <th style="padding:6px 8px;">Nav 1 Entry #</th>
+                            <th style="padding:6px 8px;">Nav 1 Name</th>
+                            <th style="padding:6px 8px;">Nav 2 Entry #</th>
+                            <th style="padding:6px 8px;">Nav 2 Name</th>
+                            <th style="padding:6px 8px;">Nav 3 Entry #</th>
+                            <th style="padding:6px 8px;">Nav 3 Name</th>
+                            <th style="padding:6px 8px;">Nav 4 Entry #</th>
+                            <th style="padding:6px 8px;">Nav 4 Name</th>
+                            <th style="padding:6px 8px;">Nav 5 Entry #</th>
+                            <th style="padding:6px 8px;">Nav 5 Name</th>
+                            <th style="padding:6px 8px;">Shared Driver</th>
+                            <th style="padding:6px 8px;">Shared Nav</th>
+                            <th style="padding:6px 8px;">Shared Drive</th>
+                            <th style="padding:6px 8px;">Driver Email</th>
+                            <th style="padding:6px 8px;">Driver Phone</th>
+                            <th style="padding:6px 8px;">Nav 1 Email</th>
+                            <th style="padding:6px 8px;">Nav 1 Phone</th>
+                            <th style="padding:6px 8px;">Nav 2 Email</th>
+                            <th style="padding:6px 8px;">Nav 2 Phone</th>
+                            <th style="padding:6px 8px;">Nav 3 Email</th>
+                            <th style="padding:6px 8px;">Nav 3 Phone</th>
+                            <th style="padding:6px 8px;">Nav 4 Email</th>
+                            <th style="padding:6px 8px;">Nav 4 Phone</th>
+                            <th style="padding:6px 8px;">Nav 5 Email</th>
+                            <th style="padding:6px 8px;">Nav 5 Phone</th>
+                            <th style="padding:6px 8px;">Car Year</th>
+                            <th style="padding:6px 8px;">Car Make</th>
+                            <th style="padding:6px 8px;">Car Model</th>
+                            <th style="padding:6px 8px;">Car Colour</th>
+                            <th style="padding:6px 8px;">Car CC</th>
+                            <th style="padding:6px 8px;">Drv EC Name</th>
+                            <th style="padding:6px 8px;">Drv EC Phone</th>
+                            <th style="padding:6px 8px;">Nav 1 EC Name</th>
+                            <th style="padding:6px 8px;">Nav 1 EC Phone</th>
+                            <th style="padding:6px 8px;">Nav 2 EC Name</th>
+                            <th style="padding:6px 8px;">Nav 2 EC Phone</th>
+                            <th style="padding:6px 8px;">Nav 3 EC Name</th>
+                            <th style="padding:6px 8px;">Nav 3 EC Phone</th>
+                            <th style="padding:6px 8px;">Nav 4 EC Name</th>
+                            <th style="padding:6px 8px;">Nav 4 EC Phone</th>
+                            <th style="padding:6px 8px;">Nav 5 EC Name</th>
+                            <th style="padding:6px 8px;">Nav 5 EC Phone</th>
+                        </tr>
+                    </thead>
+                    <tbody id="elTbody"></tbody>
+                </table>
+            </div>
+            <div id="elNoData" class="no-data">No data loaded. Please upload a CSV file and assign car numbers.</div>
+        </div>
+        <!-- ══ END ENTRY LIST PAGE ═══════════════════════════════════════════════ -->
+
     </div>
     <footer>
         Adelaide Rally Entry Management System | Data synced to Dropbox
@@ -1371,7 +1442,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.19';
+        const DASHBOARD_VERSION = 'v4.20';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -4364,6 +4435,8 @@
                 renderAddOnsTable();
             } else if (viewName === 'box-packing') {
                 renderBoxPacking();
+            } else if (viewName === 'entry-list') {
+                renderEntryList();
             }
             // Only scroll to top if this is a manual view switch (not an auto-sync refresh)
             if (scrollToTop) {
@@ -8407,6 +8480,284 @@
             const url   = URL.createObjectURL(blob);
             const a     = document.createElement('a');
             a.href = url; a.download = 'Adelaide_Rally_Box_Packing.xlsx'; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ── Entry List ──────────────────────────────────────────────────────
+        function _buildEntryListRows() {
+            if (!csvData.length) return [];
+
+            const entryIdIdx       = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const firstNameIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-first'));
+            const lastNameIdx      = csvHeaders.findIndex(h => h.toLowerCase().includes('first / last name-last'));
+            const mainEntryTypeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const phoneIdx         = csvHeaders.findIndex(h => h.toLowerCase() === 'phone number');
+            const emailIdx         = csvHeaders.findIndex(h => h.toLowerCase().includes('email address'));
+            const nomDrvPhoneIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes("driver's phone") || (h.toLowerCase().includes('driver') && h.toLowerCase().includes('phone number') && !h.toLowerCase().includes('navigator')));
+            const sharedDriveIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('shared drive'));
+
+            // Vehicle fields
+            const carYearIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle year'));
+            const carMakeIdx   = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle make'));
+            const carModelIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle model'));
+            const carColourIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle colour'));
+            const carCCIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('engine capacity'));
+
+            // Emergency contacts (driver/entrant — up to 2 contacts)
+            const ec1FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().includes('first'));
+            const ec1LIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().includes('last'));
+            const ec1PhIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().includes('phone'));
+            const ec2FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().includes('first'));
+            const ec2LIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().includes('last'));
+            const ec2PhIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 2') && h.toLowerCase().includes('phone'));
+
+            // Add-on indices
+            const swapConfig   = additionalItemsConfig.find(c => c.item === 'Driver Swap');
+            const swapIdx      = swapConfig ? csvHeaders.findIndex(h => h === swapConfig.header) : -1;
+
+            function _getVal(row, idx) { return row && idx >= 0 ? (row[idx] || '').trim() : ''; }
+            function _getName(row) { return [_getVal(row, firstNameIdx), _getVal(row, lastNameIdx)].filter(Boolean).join(' '); }
+            function _hasSwap(row) { return swapIdx >= 0 && row && (row[swapIdx] || '').toLowerCase().trim() === (swapConfig?.trigger || '').toLowerCase(); }
+            function _ecName(row, fIdx, lIdx) { return [_getVal(row, fIdx), _getVal(row, lIdx)].filter(Boolean).join(' '); }
+            function _ecCombined(row, f1, l1, ph1, f2, l2, ph2) {
+                const n1 = _ecName(row, f1, l1), p1 = _getVal(row, ph1);
+                const n2 = _ecName(row, f2, l2), p2 = _getVal(row, ph2);
+                const name = [n1, n2].filter(Boolean).join(' / ');
+                const phone = [p1, p2].filter(Boolean).join(' / ');
+                return { name, phone };
+            }
+
+            // Build entryId → CSV row map
+            const rowByEntryId = {};
+            csvData.forEach(row => {
+                const eid = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (eid) rowByEntryId[eid] = row;
+            });
+
+            // Build navigator pool (same logic as Box Packing)
+            const navigators = [];
+            csvData.forEach(row => {
+                const entryId = entryIdIdx >= 0 ? (row[entryIdIdx] || '').trim() : '';
+                if (!entryId || withdrawn.has(entryId)) return;
+                const entryType = mainEntryTypeIdx >= 0 ? (row[mainEntryTypeIdx] || '').toLowerCase().trim() : '';
+                if (!entryType.includes('navigator')) return;
+                const nomDrvPhone = nomDrvPhoneIdx >= 0 ? (row[nomDrvPhoneIdx] || '').trim() : '';
+                navigators.push({ entryId, name: _getName(row), phone: _getVal(row, phoneIdx), email: _getVal(row, emailIdx), nominatedDrvPhone: nomDrvPhone, row });
+            });
+
+            const slots = getEffectiveSlots();
+            const result = [];
+
+            slots.forEach(slot => {
+                const assign = carNumberAssignments[slot.carNum];
+                if (!assign || !assign.entryId) return;
+
+                const driverEntryId = String(assign.entryId);
+                const driverRow     = rowByEntryId[driverEntryId] || null;
+                const drvName       = _getName(driverRow) || assign.driverName || '';
+                const drvPhone      = _getVal(driverRow, phoneIdx);
+                const drvEmail      = _getVal(driverRow, emailIdx);
+                const sharedDrive   = _getVal(driverRow, sharedDriveIdx);
+                const sharedDriver  = _hasSwap(driverRow) ? 'Yes' : 'No';
+
+                // Find navigators for this driver (same phone-match + manualNavMatches logic as Box Packing)
+                let navs = drvPhone ? navigators.filter(n => n.nominatedDrvPhone && n.nominatedDrvPhone === drvPhone) : [];
+                manualNavMatches.forEach(m => {
+                    if (m.driverEntryId !== driverEntryId) return;
+                    if (navs.some(n => n.entryId === m.navigatorEntryId)) return;
+                    const mn = navigators.find(n => n.entryId === m.navigatorEntryId);
+                    if (mn) navs.push(mn);
+                });
+
+                // Nav 1 shared nav flag
+                const sharedNav = navs.length > 0 && _hasSwap(navs[0].row) ? 'Yes' : 'No';
+
+                // Emergency contacts (driver)
+                const drvEC = _ecCombined(driverRow, ec1FIdx, ec1LIdx, ec1PhIdx, ec2FIdx, ec2LIdx, ec2PhIdx);
+
+                // Per-nav emergency contacts
+                const navEC = navs.map(n => _ecCombined(n.row, ec1FIdx, ec1LIdx, ec1PhIdx, ec2FIdx, ec2LIdx, ec2PhIdx));
+
+                result.push({
+                    carNum:      slot.carNum,
+                    rsCode:      rallySafeCodes[slot.carNum] || '',
+                    driverNo:    driverEntryId,
+                    driverName:  drvName,
+                    category:    slot.category || '',
+                    navs,
+                    navEC,
+                    sharedDriver,
+                    sharedNav,
+                    sharedDrive: sharedDrive || 'No',
+                    drvEmail,
+                    drvPhone,
+                    carYear:     _getVal(driverRow, carYearIdx),
+                    carMake:     _getVal(driverRow, carMakeIdx),
+                    carModel:    _getVal(driverRow, carModelIdx),
+                    carColour:   _getVal(driverRow, carColourIdx),
+                    carCC:       _getVal(driverRow, carCCIdx),
+                    drvECName:   drvEC.name,
+                    drvECPhone:  drvEC.phone,
+                });
+            });
+
+            return result;
+        }
+
+        function renderEntryList() {
+            const tbl    = document.getElementById('elTable');
+            const tbody  = document.getElementById('elTbody');
+            const noData = document.getElementById('elNoData');
+            if (!tbl || !tbody || !noData) return;
+
+            if (!csvData.length || !Object.keys(carNumberAssignments).length) {
+                tbl.style.display = 'none';
+                noData.style.display = 'block';
+                return;
+            }
+
+            const search  = (document.getElementById('elSearch')    || {}).value?.toLowerCase() || '';
+            const catFilt = (document.getElementById('elCatFilter') || {}).value || '';
+
+            const rows = _buildEntryListRows();
+
+            // Populate category filter
+            const catSel = document.getElementById('elCatFilter');
+            if (catSel) {
+                const cats = [...new Set(rows.map(r => r.category).filter(Boolean))].sort();
+                const cur = catSel.value;
+                catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
+            }
+
+            tbody.innerHTML = '';
+            let shown = 0;
+            rows.forEach((r, ri) => {
+                if (catFilt && r.category !== catFilt) return;
+                const allText = [r.carNum, r.rsCode, r.driverNo, r.driverName, r.category,
+                    ...r.navs.map(n => n.name + ' ' + n.entryId),
+                    r.drvEmail, r.drvPhone].join(' ').toLowerCase();
+                if (search && !allText.includes(search)) return;
+
+                const n = i => r.navs[i] || null;
+                const ne = i => r.navEC[i] || {name:'',phone:''};
+                const cell = v => `<td style="padding:4px 8px;border-bottom:1px solid #e2e8f0;">${v || ''}</td>`;
+
+                const tr = document.createElement('tr');
+                tr.style.background = ri % 2 === 0 ? '#fff' : '#f8fafc';
+                tr.innerHTML =
+                    cell(r.carNum) +
+                    cell(r.rsCode) +
+                    cell(r.driverNo) +
+                    cell(r.driverName) +
+                    cell(r.category) +
+                    cell(n(0)?.entryId || '') +
+                    cell(n(0)?.name || '') +
+                    cell(n(1)?.entryId || '') +
+                    cell(n(1)?.name || '') +
+                    cell(n(2)?.entryId || '') +
+                    cell(n(2)?.name || '') +
+                    cell(n(3)?.entryId || '') +
+                    cell(n(3)?.name || '') +
+                    cell(n(4)?.entryId || '') +
+                    cell(n(4)?.name || '') +
+                    cell(r.sharedDriver) +
+                    cell(r.sharedNav) +
+                    cell(r.sharedDrive) +
+                    cell(r.drvEmail) +
+                    cell(r.drvPhone) +
+                    cell(n(0)?.email || '') +
+                    cell(n(0)?.phone || '') +
+                    cell(n(1)?.email || '') +
+                    cell(n(1)?.phone || '') +
+                    cell(n(2)?.email || '') +
+                    cell(n(2)?.phone || '') +
+                    cell(n(3)?.email || '') +
+                    cell(n(3)?.phone || '') +
+                    cell(n(4)?.email || '') +
+                    cell(n(4)?.phone || '') +
+                    cell(r.carYear) +
+                    cell(r.carMake) +
+                    cell(r.carModel) +
+                    cell(r.carColour) +
+                    cell(r.carCC) +
+                    cell(r.drvECName) +
+                    cell(r.drvECPhone) +
+                    cell(ne(0).name) +
+                    cell(ne(0).phone) +
+                    cell(ne(1).name) +
+                    cell(ne(1).phone) +
+                    cell(ne(2).name) +
+                    cell(ne(2).phone) +
+                    cell(ne(3).name) +
+                    cell(ne(3).phone) +
+                    cell(ne(4).name) +
+                    cell(ne(4).phone);
+                tbody.appendChild(tr);
+                shown++;
+            });
+
+            tbl.style.display = shown > 0 ? '' : 'none';
+            noData.style.display = shown === 0 ? 'block' : 'none';
+            if (shown === 0) noData.querySelector ? (noData.textContent = 'No entries match the current filter.') : null;
+        }
+
+        function exportEntryListExcel() {
+            const rows = _buildEntryListRows();
+            if (!rows.length) { alert('No entry list data. Assign car numbers first.'); return; }
+            const headers = [
+                'Car Number','RS Code','Driver Entry No.','Driver Name','Category',
+                'Nav 1 Entry No.','Nav 1 Name','Nav 2 Entry No.','Nav 2 Name',
+                'Nav 3 Entry No.','Nav 3 Name','Nav 4 Entry No.','Nav 4 Name',
+                'Nav 5 Entry No.','Nav 5 Name',
+                'Shared Driver','Shared Nav','Shared Drive',
+                'Driver Email','Driver Phone',
+                'Nav 1 Email','Nav 1 Phone','Nav 2 Email','Nav 2 Phone',
+                'Nav 3 Email','Nav 3 Phone','Nav 4 Email','Nav 4 Phone',
+                'Nav 5 Email','Nav 5 Phone',
+                'Car Year','Car Make','Car Model','Car Colour','Car CC',
+                'Driver EC Name','Driver EC Phone',
+                'Nav 1 EC Name','Nav 1 EC Phone',
+                'Nav 2 EC Name','Nav 2 EC Phone',
+                'Nav 3 EC Name','Nav 3 EC Phone',
+                'Nav 4 EC Name','Nav 4 EC Phone',
+                'Nav 5 EC Name','Nav 5 EC Phone',
+            ];
+            const data = [headers];
+            rows.forEach(r => {
+                const n  = i => r.navs[i] || null;
+                const ne = i => r.navEC[i] || {name:'',phone:''};
+                data.push([
+                    r.carNum, r.rsCode, r.driverNo, r.driverName, r.category,
+                    n(0)?.entryId||'', n(0)?.name||'',
+                    n(1)?.entryId||'', n(1)?.name||'',
+                    n(2)?.entryId||'', n(2)?.name||'',
+                    n(3)?.entryId||'', n(3)?.name||'',
+                    n(4)?.entryId||'', n(4)?.name||'',
+                    r.sharedDriver, r.sharedNav, r.sharedDrive,
+                    r.drvEmail, r.drvPhone,
+                    n(0)?.email||'', n(0)?.phone||'',
+                    n(1)?.email||'', n(1)?.phone||'',
+                    n(2)?.email||'', n(2)?.phone||'',
+                    n(3)?.email||'', n(3)?.phone||'',
+                    n(4)?.email||'', n(4)?.phone||'',
+                    r.carYear, r.carMake, r.carModel, r.carColour, r.carCC,
+                    r.drvECName, r.drvECPhone,
+                    ne(0).name, ne(0).phone,
+                    ne(1).name, ne(1).phone,
+                    ne(2).name, ne(2).phone,
+                    ne(3).name, ne(3).phone,
+                    ne(4).name, ne(4).phone,
+                ]);
+            });
+            const wb  = XLSX.utils.book_new();
+            const ws  = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+            XLSX.utils.book_append_sheet(wb, ws, 'Entry List');
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob  = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url   = URL.createObjectURL(blob);
+            const a     = document.createElement('a');
+            a.href = url; a.download = 'Adelaide_Rally_Entry_List.xlsx'; a.click();
             URL.revokeObjectURL(url);
         }
 
