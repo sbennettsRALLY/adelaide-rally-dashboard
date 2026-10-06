@@ -2047,6 +2047,19 @@
                 const a = carNumberAssignments[cn];
                 if (a && a.entryId) carByEntry[String(a.entryId).trim()] = cn;
             });
+            // Navigators take the car number (and category) of the car they're assigned to,
+            // using the same matching as the Entry List tab (_buildEntryListRows).
+            const catByEntry = {};
+            try {
+                _buildEntryListRows().forEach(r => {
+                    (r.navs || []).forEach(n => {
+                        const nid = String(n.entryId || '').trim();
+                        if (!nid) return;
+                        carByEntry[nid] = r.carNum;
+                        catByEntry[nid] = r.category || '';
+                    });
+                });
+            } catch (e) { console.warn('Raw Data: navigator car lookup failed', e); }
             const eidIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
             const typeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
             const cats = new Set(), types = new Set();
@@ -2056,7 +2069,7 @@
                 const eid = eidIdx >= 0 ? (row[eidIdx] || '').trim() : '';
                 const isWd = !!eid && withdrawn.has(eid);
                 const car = (!isWd && eid && carByEntry[eid] !== undefined) ? String(carByEntry[eid]) : '';
-                const cat = csvRowCategory(row);
+                const cat = csvRowCategory(row) || (car ? (catByEntry[eid] || '') : '');
                 const type = typeIdx >= 0 ? (row[typeIdx] || '').trim() : '';
                 if (cat) cats.add(cat);
                 if (type) types.add(type);
