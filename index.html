@@ -708,6 +708,20 @@
             <div class="sec-title">Complete Data</div>
             <div class="filters">
                 <input type="text" id="csvSearch" class="fins" placeholder="Search all data..." />
+                <input type="text" id="csvCarSearch" class="fins" placeholder="Car # lookup..." style="max-width:130px;" />
+                <select id="csvCatFilter" class="fsel"><option value="">All Categories</option></select>
+                <select id="csvTypeFilter" class="fsel"><option value="">All Entry Types</option></select>
+                <select id="csvCarFilter" class="fsel">
+                    <option value="">Car # (All)</option>
+                    <option value="assigned">Has Car #</option>
+                    <option value="none">No Car #</option>
+                </select>
+                <select id="csvStatusFilter" class="fsel">
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="withdrawn">Withdrawn</option>
+                </select>
+                <button class="btn-reset" onclick="resetCsvFilters()">Reset</button>
             </div>
             <div class="stat-row">
                 <div class="stat-chip no-click">
@@ -1794,6 +1808,8 @@
             });
             document.getElementById('autoMASearch').addEventListener('keyup', renderAutoMALicenceChecks);
             document.getElementById('csvSearch').addEventListener('keyup', filterCsvTable);
+            ['csvCarSearch'].forEach(id => document.getElementById(id).addEventListener('input', filterCsvTable));
+            ['csvCatFilter','csvTypeFilter','csvCarFilter','csvStatusFilter'].forEach(id => document.getElementById(id).addEventListener('change', filterCsvTable));
             document.getElementById('docSearch').addEventListener('keyup', filterDocuments);
             document.getElementById('maSearch').addEventListener('keyup', renderMALicenceTable);
             document.getElementById('maChecksSearch').addEventListener('keyup', renderMALicenceChecks);
@@ -1990,6 +2006,23 @@
             result.push(current.trim());
             return result;
         }
+        // Raw Data: category for a row (same driverEntryConfig matching the Car Numbers page uses)
+        function csvRowCategory(row) {
+            for (const config of driverEntryConfig) {
+                let hIdx = csvHeaders.findIndex(h => h === config.header1);
+                if (hIdx < 0) hIdx = csvHeaders.findIndex(h => h.trim().toLowerCase() === config.header1.trim().toLowerCase());
+                if (hIdx < 0) continue;
+                const val = (row[hIdx] || '').trim();
+                if (!val) continue;
+                if (val === config.trigger1 || val.startsWith(config.trigger1)) return config.category;
+            }
+            return '';
+        }
+        function resetCsvFilters() {
+            ['csvSearch','csvCarSearch','csvCatFilter','csvTypeFilter','csvCarFilter','csvStatusFilter']
+                .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            filterCsvTable();
+        }
         function renderCsvTable() {
             if (csvData.length === 0) {
                 document.getElementById('csvNoData').style.display = 'block';
@@ -2000,15 +2033,42 @@
             document.getElementById('csvTable').style.display = 'table';
             const headRow = document.getElementById('csvHead');
             headRow.innerHTML = '';
+            const carTh = document.createElement('th');
+            carTh.textContent = 'Car #';
+            headRow.appendChild(carTh);
             csvHeaders.forEach(h => {
                 const th = document.createElement('th');
                 th.textContent = h || '(empty)';
                 headRow.appendChild(th);
             });
+            // entryId -> car number (blank if unassigned or withdrawn)
+            const carByEntry = {};
+            Object.keys(carNumberAssignments).forEach(cn => {
+                const a = carNumberAssignments[cn];
+                if (a && a.entryId) carByEntry[String(a.entryId).trim()] = cn;
+            });
+            const eidIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const typeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
+            const cats = new Set(), types = new Set();
             const bodyRow = document.getElementById('csvBody');
             bodyRow.innerHTML = '';
             csvData.forEach(row => {
+                const eid = eidIdx >= 0 ? (row[eidIdx] || '').trim() : '';
+                const isWd = !!eid && withdrawn.has(eid);
+                const car = (!isWd && eid && carByEntry[eid] !== undefined) ? String(carByEntry[eid]) : '';
+                const cat = csvRowCategory(row);
+                const type = typeIdx >= 0 ? (row[typeIdx] || '').trim() : '';
+                if (cat) cats.add(cat);
+                if (type) types.add(type);
                 const tr = document.createElement('tr');
+                tr.dataset.car = car;
+                tr.dataset.cat = cat;
+                tr.dataset.type = type;
+                tr.dataset.wd = isWd ? '1' : '0';
+                const carTd = document.createElement('td');
+                carTd.textContent = car;
+                carTd.style.fontWeight = '700';
+                tr.appendChild(carTd);
                 row.forEach(cell => {
                     const td = document.createElement('td');
                     td.textContent = cell || '';
@@ -2016,24 +2076,48 @@
                 });
                 bodyRow.appendChild(tr);
             });
+            // Populate dropdowns, preserving current selection
+            const fill = (id, set, allLabel) => {
+                const el = document.getElementById(id); if (!el) return;
+                const cur = el.value;
+                el.innerHTML = '';
+                el.add(new Option(allLabel, ''));
+                [...set].sort().forEach(v => el.add(new Option(v, v)));
+                el.value = [...set].includes(cur) ? cur : '';
+            };
+            fill('csvCatFilter', cats, 'All Categories');
+            fill('csvTypeFilter', types, 'All Entry Types');
             updateCsvStats();
-            // Apply search filter to the newly built table
             filterCsvTable();
         }
         function filterCsvTable() {
-            const term = document.getElementById('csvSearch').value.toLowerCase();
+            const term   = document.getElementById('csvSearch').value.toLowerCase();
+            const carQ   = document.getElementById('csvCarSearch').value.trim().toLowerCase();
+            const catF   = document.getElementById('csvCatFilter').value;
+            const typeF  = document.getElementById('csvTypeFilter').value;
+            const carF   = document.getElementById('csvCarFilter').value;
+            const statF  = document.getElementById('csvStatusFilter').value;
             const rows = document.getElementById('csvBody').querySelectorAll('tr');
             let count = 0;
             csvData.forEach((row, idx) => {
-                const match = row.join(' ').toLowerCase().includes(term);
-                rows[idx].style.display = match ? '' : 'none';
+                const tr = rows[idx]; if (!tr) return;
+                const d = tr.dataset;
+                let match = row.join(' ').toLowerCase().includes(term);
+                if (match && carQ) match = d.car.toLowerCase() === carQ || d.car.toLowerCase().startsWith(carQ);
+                if (match && catF)  match = d.cat === catF;
+                if (match && typeF) match = d.type === typeF;
+                if (match && carF === 'assigned') match = d.car !== '';
+                if (match && carF === 'none')     match = d.car === '';
+                if (match && statF === 'active')    match = d.wd !== '1';
+                if (match && statF === 'withdrawn') match = d.wd === '1';
+                tr.style.display = match ? '' : 'none';
                 if (match) count++;
             });
             document.getElementById('csvVisible').textContent = count;
         }
         function updateCsvStats() {
             document.getElementById('csvTotal').textContent = csvData.length;
-            document.getElementById('csvCols').textContent = csvHeaders.length;
+            document.getElementById('csvCols').textContent = csvHeaders.length + 1;
             document.getElementById('csvVisible').textContent = csvData.length;
             updateDashboardTables();
         }
