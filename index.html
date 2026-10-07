@@ -1454,7 +1454,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.22';
+        const DASHBOARD_VERSION = 'v4.23';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -7873,7 +7873,7 @@
                     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
                     const hdrs = rows[0].map(h => String(h).trim().toLowerCase());
                     const colVeh  = hdrs.findIndex(h => h.includes('vehicle') || h === 'car #');
-                    const colCode = hdrs.findIndex(h => h.includes('rallysafe no') || h.includes('rallysafe no.') || h.includes('rs code') || (h.includes('rallysafe') && h.includes('no')));
+                    const colCode = hdrs.findIndex(h => h.includes('rallysafe no') || h.includes('rallysafe no.') || h.includes('rs code') || (h.includes('rallysafe') && h.includes('no')) || h === 'rslitecode' || h.includes('rslite'));
                     if (colVeh < 0 || colCode < 0) {
                         alert('⚠ Could not locate Vehicle and RallySafe No. columns. Check the spreadsheet format.');
                         return;
