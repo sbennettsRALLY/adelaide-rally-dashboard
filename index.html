@@ -2023,6 +2023,33 @@
                 .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
             filterCsvTable();
         }
+        // entryId -> car number / category (drivers via assignments, navigators via Entry List matching)
+        function buildRawCarLookup() {
+            const carByEntry = {}, catByEntry = {};
+            Object.keys(carNumberAssignments).forEach(cn => {
+                const a = carNumberAssignments[cn];
+                if (a && a.entryId) carByEntry[String(a.entryId).trim()] = cn;
+            });
+            try {
+                _buildEntryListRows().forEach(r => {
+                    (r.navs || []).forEach(n => {
+                        const nid = String(n.entryId || '').trim();
+                        if (!nid) return;
+                        carByEntry[nid] = r.carNum;
+                        catByEntry[nid] = r.category || '';
+                    });
+                });
+            } catch (e) { console.warn('Raw Data: navigator car lookup failed', e); }
+            return { carByEntry, catByEntry };
+        }
+        // Car # and Category for a raw row; blank if withdrawn or unassigned
+        function rawRowCarInfo(row, eidIdx, lookup) {
+            const eid = eidIdx >= 0 ? (row[eidIdx] || '').trim() : '';
+            const isWd = !!eid && withdrawn.has(eid);
+            const car = (!isWd && eid && lookup.carByEntry[eid] !== undefined) ? String(lookup.carByEntry[eid]) : '';
+            const cat = csvRowCategory(row) || (car ? (lookup.catByEntry[eid] || '') : '');
+            return { eid, isWd, car, cat };
+        }
         function renderCsvTable() {
             if (csvData.length === 0) {
                 document.getElementById('csvNoData').style.display = 'block';
@@ -2041,26 +2068,8 @@
                 th.textContent = h || '(empty)';
                 headRow.appendChild(th);
             });
-            // entryId -> car number (blank if unassigned or withdrawn)
-            const carByEntry = {};
-            Object.keys(carNumberAssignments).forEach(cn => {
-                const a = carNumberAssignments[cn];
-                if (a && a.entryId) carByEntry[String(a.entryId).trim()] = cn;
-            });
-            // Navigators take the car number (and category) of the car they're assigned to,
-            // using the same matching as the Entry List tab (_buildEntryListRows).
-            const catByEntry = {};
-            try {
-                _buildEntryListRows().forEach(r => {
-                    (r.navs || []).forEach(n => {
-                        const nid = String(n.entryId || '').trim();
-                        if (!nid) return;
-                        carByEntry[nid] = r.carNum;
-                        catByEntry[nid] = r.category || '';
-                    });
-                });
-            } catch (e) { console.warn('Raw Data: navigator car lookup failed', e); }
-            const eidIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+            const { carByEntry, catByEntry } = buildRawCarLookup();
+            const eidIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
             const typeIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('main entry type'));
             const cats = new Set(), types = new Set();
             const bodyRow = document.getElementById('csvBody');
@@ -6831,7 +6840,13 @@
                 const cnExportWs = XLSX.utils.aoa_to_sheet(cnExportData);
                 XLSX.utils.book_append_sheet(wb, cnExportWs, 'Car Numbers');
                 // ===== SHEET 7: Raw Data =====
-                const rawDataRows = [csvHeaders, ...csvData];
+                const rawLookup = buildRawCarLookup();
+                const rawEidIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('entry id'));
+                const rawDataRows = [['Car #', 'Category', ...csvHeaders]];
+                csvData.forEach(row => {
+                    const info = rawRowCarInfo(row, rawEidIdx, rawLookup);
+                    rawDataRows.push([info.car === '' ? '' : (isNaN(info.car) ? info.car : Number(info.car)), info.cat, ...row]);
+                });
                 const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
                 XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
 
