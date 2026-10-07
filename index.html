@@ -1454,7 +1454,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.23';
+        const DASHBOARD_VERSION = 'v4.24';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -8831,8 +8831,11 @@
             const blob  = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             const url   = URL.createObjectURL(blob);
             const a     = document.createElement('a');
-            a.href = url; a.download = 'Adelaide_Rally_Entry_List.xlsx'; a.click();
-            URL.revokeObjectURL(url);
+            a.href = url; a.download = 'Adelaide_Rally_Entry_List.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
         // ── Render ──────────────────────────────────────────────────────────
