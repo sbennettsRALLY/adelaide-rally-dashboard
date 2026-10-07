@@ -1501,6 +1501,7 @@
         let navigationMarryEntries = []; // Legacy field — kept for Dropbox backward compat but not used by UI
         let carNumberAssignments = {}; // {carNum: {entryId, driverName}} — Car Numbers page
         let rallySafeCodes = {};       // {carNum: rsCode} — RallySafe codes from provider
+        let rallySafeTimestamp = 0;    // when codes were last imported (newest import wins on sync)
         let customCarSlots = [];       // [{carNum, category, role, insertAfter}] — user-added extra slots
         let cnSwapSource = null; // carNum selected as swap source
         let cnWithdrawnEntryIds = new Set(); // Kept in sync by renderCarNumbers() for use outside its scope
@@ -4600,6 +4601,7 @@
                 maVerificationTimestamp,
                 maAutoChecked,
                 rallySafeCodes,
+                rallySafeTimestamp,
                 stateTimestamps: {
                     carNumbers: carNumberTimestamp,
                     customCarSlots: customCarSlotsTimestamp,
@@ -4648,6 +4650,7 @@
                     maVerificationTimestamp = data.maVerificationTimestamp || 0;
                     maAutoChecked = data.maAutoChecked || {};
                     rallySafeCodes = data.rallySafeCodes || {};
+                    rallySafeTimestamp = data.rallySafeTimestamp || 0;
                 // Migration v4.15: Prima Tour entrants renamed from '1'–'60' to 'PT1'–'PT60'
                 for (let _mn = 1; _mn <= 60; _mn++) {
                     const _mo = String(_mn), _mn2 = 'PT' + _mn;
@@ -5006,7 +5009,11 @@
                 maVerificationData   = Array.isArray(remoteState.maVerificationData) ? remoteState.maVerificationData : [];
                 maVerificationTimestamp = remoteState.maVerificationTimestamp || 0;
                 maAutoChecked        = remoteState.maAutoChecked || {};
-                rallySafeCodes       = remoteState.rallySafeCodes || {};
+                // Keep local RallySafe codes unless Dropbox actually has some (older Dropbox files never stored them)
+                if (remoteState.rallySafeCodes && Object.keys(remoteState.rallySafeCodes).length > 0) {
+                    rallySafeCodes     = remoteState.rallySafeCodes;
+                    rallySafeTimestamp = remoteState.rallySafeTimestamp || 0;
+                }
                 // Migration v4.15: Prima Tour entrants renamed from '1'–'60' to 'PT1'–'PT60'
                 for (let _mn = 1; _mn <= 60; _mn++) {
                     const _mo = String(_mn), _mn2 = 'PT' + _mn;
@@ -5028,6 +5035,7 @@
                     carNumberAssignments, customCarSlots, manualNavMatches,
                     maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                     maVerificationData, maVerificationTimestamp, maAutoChecked,
+                    rallySafeCodes, rallySafeTimestamp,
                     stateTimestamps: {
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
@@ -5087,7 +5095,7 @@
                     navigationMarryEntries, carNumberAssignments, customCarSlots, manualNavMatches,
                     maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                     maVerificationData, maVerificationTimestamp, maAutoChecked,
-                    rallySafeCodes,
+                    rallySafeCodes, rallySafeTimestamp,
                     stateTimestamps: { carNumbers: carNumberTimestamp, customCarSlots: customCarSlotsTimestamp, manualNavMatches: manualNavMatchesTimestamp },
                     migrations: JSON.parse(localStorage.getItem('adelaideRallyMigrations') || '[]'),
                     timestamp: Date.now()
@@ -5338,6 +5346,12 @@
                             maVerificationData    = remoteState.maVerificationData;
                             maVerificationTimestamp = remVerTs;
                         }
+                        // RallySafe codes: newest import wins; legacy/no-timestamp = union with local priority
+                        {
+                            const rr = remoteState.rallySafeCodes || {}, rt = remoteState.rallySafeTimestamp || 0;
+                            if (rt > rallySafeTimestamp && Object.keys(rr).length) { rallySafeCodes = { ...rr }; rallySafeTimestamp = rt; }
+                            else if (rt === rallySafeTimestamp) { rallySafeCodes = { ...rr, ...rallySafeCodes }; }
+                        }
                         // maAutoChecked: same merge as maLicenceChecked (union, local explicit false wins)
                         if (remoteState.maAutoChecked) {
                             Object.entries(remoteState.maAutoChecked).forEach(([k, v]) => {
@@ -5384,6 +5398,8 @@
                     maVerificationData: maVerificationData,
                     maVerificationTimestamp: maVerificationTimestamp,
                     maAutoChecked: maAutoChecked,
+                    rallySafeCodes: rallySafeCodes,
+                    rallySafeTimestamp: rallySafeTimestamp,
                     stateTimestamps: {
                         carNumbers: carNumberTimestamp,
                         customCarSlots: customCarSlotsTimestamp,
@@ -5835,8 +5851,21 @@
 
                     // Merge rallySafeCodes: last-writer-wins per car number
                     {
+                        // Newest import wins (rallySafeTimestamp). If timestamps tie (or legacy, both 0),
+                        // union with LOCAL taking priority so a stale Dropbox value never overwrites a fresh import.
                         const remRS = remoteState.rallySafeCodes || {};
-                        const mergedRS = { ...rallySafeCodes, ...remRS };
+                        const remRSTs = remoteState.rallySafeTimestamp || 0;
+                        let mergedRS;
+                        if (remRSTs > rallySafeTimestamp && Object.keys(remRS).length) {
+                            mergedRS = { ...remRS };
+                            rallySafeTimestamp = remRSTs;
+                        } else if (remRSTs < rallySafeTimestamp) {
+                            mergedRS = { ...rallySafeCodes };
+                            localAhead = true;
+                        } else {
+                            mergedRS = { ...remRS, ...rallySafeCodes };
+                            if (Object.keys(rallySafeCodes).some(k => remRS[k] !== rallySafeCodes[k])) localAhead = true;
+                        }
                         if (JSON.stringify(mergedRS) !== JSON.stringify(rallySafeCodes)) {
                             rallySafeCodes = mergedRS;
                             stateUpdated = true;
@@ -5856,7 +5885,7 @@
                             customCarSlots, manualNavMatches,
                             maLicenceVerification, maLicenceChecked, maExpiryOverride, maLicenceTypeManual,
                             maVerificationData, maVerificationTimestamp, maAutoChecked,
-                            rallySafeCodes,
+                            rallySafeCodes, rallySafeTimestamp,
                             stateTimestamps: {
                                 carNumbers: carNumberTimestamp,
                                 customCarSlots: customCarSlotsTimestamp,
@@ -7930,6 +7959,7 @@
                     }
                     if (!confirm(`Import ${count} RS code${count !== 1 ? 's' : ''} from "${sheetName}"?\n\nThis will replace any existing RS codes.`)) return;
                     rallySafeCodes = imported;
+                    rallySafeTimestamp = Date.now();
                     saveToStorage();
                     renderRallySafe();
                     showMessage('rsMsg', 'success', `✓ Imported ${count} RS code${count !== 1 ? 's' : ''}`);
