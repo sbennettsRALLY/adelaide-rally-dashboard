@@ -1454,7 +1454,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.24';
+        const DASHBOARD_VERSION = 'v4.25';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6996,6 +6996,49 @@
                         XLSX.utils.book_append_sheet(wb, bpWs, 'Box Packing');
                     }
                 }
+                // ── Entry List sheet ──────────────────────────────────────────
+                const elRows = _buildEntryListRows();
+                if (elRows.length > 0) {
+                    const elHeaders = [
+                        'Car Number','RS Code','Driver Entry No.','Driver Name','Category',
+                        'Nav 1 Entry No.','Nav 1 Name','Nav 2 Entry No.','Nav 2 Name',
+                        'Nav 3 Entry No.','Nav 3 Name','Nav 4 Entry No.','Nav 4 Name',
+                        'Nav 5 Entry No.','Nav 5 Name',
+                        'Shared Driver','Shared Nav','Shared Drive',
+                        'Driver Email','Driver Phone',
+                        'Nav 1 Email','Nav 1 Phone','Nav 2 Email','Nav 2 Phone',
+                        'Nav 3 Email','Nav 3 Phone','Nav 4 Email','Nav 4 Phone',
+                        'Nav 5 Email','Nav 5 Phone',
+                        'Car Year','Car Make','Car Model','Car Colour','Car CC',
+                        'Driver EC','Nav 1 EC','Nav 2 EC','Nav 3 EC','Nav 4 EC','Nav 5 EC',
+                    ];
+                    const elData = [elHeaders];
+                    elRows.forEach(r => {
+                        const n  = i => r.navs[i] || null;
+                        const ne = i => r.navECs[i] || '';
+                        elData.push([
+                            r.carNum, r.rsCode, r.driverNo, r.driverName, r.category,
+                            n(0)?.entryId||'', n(0)?.name||'',
+                            n(1)?.entryId||'', n(1)?.name||'',
+                            n(2)?.entryId||'', n(2)?.name||'',
+                            n(3)?.entryId||'', n(3)?.name||'',
+                            n(4)?.entryId||'', n(4)?.name||'',
+                            r.sharedDriver, r.sharedNav, r.sharedDrive,
+                            r.drvEmail, r.drvPhone,
+                            n(0)?.email||'', n(0)?.phone||'',
+                            n(1)?.email||'', n(1)?.phone||'',
+                            n(2)?.email||'', n(2)?.phone||'',
+                            n(3)?.email||'', n(3)?.phone||'',
+                            n(4)?.email||'', n(4)?.phone||'',
+                            r.carYear, r.carMake, r.carModel, r.carColour, r.carCC,
+                            r.drvEC, ne(0), ne(1), ne(2), ne(3), ne(4),
+                        ]);
+                    });
+                    const elWs = XLSX.utils.aoa_to_sheet(elData);
+                    elWs['!cols'] = elHeaders.map(h => ({ wch: Math.max(h.length + 2, 14) }));
+                    XLSX.utils.book_append_sheet(wb, elWs, 'Entry List');
+                }
+
                 // Add workbook properties to mark file as trusted
                 wb.Props = {
                     Title: 'Adelaide Rally Entry Data',
