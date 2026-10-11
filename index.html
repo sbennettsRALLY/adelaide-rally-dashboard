@@ -389,9 +389,11 @@
         #maTable td {
             white-space: nowrap;
         }
-        /* Raw Data table - prevent text wrapping */
+        /* Raw Data / Jake Data tables - prevent text wrapping */
         #csvTable th,
-        #csvTable td {
+        #csvTable td,
+        #jkTable th,
+        #jkTable td {
             white-space: nowrap;
         }
         /* Additional Navigator Entries table - prevent text wrapping */
@@ -1483,7 +1485,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.27';
+        const DASHBOARD_VERSION = 'v4.28';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
