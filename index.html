@@ -1485,7 +1485,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.28';
+        const DASHBOARD_VERSION = 'v4.29';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6989,6 +6989,16 @@
                 });
                 const rawDataWs = XLSX.utils.aoa_to_sheet(rawDataRows);
                 XLSX.utils.book_append_sheet(wb, rawDataWs, 'Raw Data');
+
+                // ===== SHEET 7b: Jake Data (Raw Data minus withdrawn) =====
+                const jakeDataRows = [['Car #', 'Category', ...csvHeaders]];
+                csvData.forEach(row => {
+                    const info = rawRowCarInfo(row, rawEidIdx, rawLookup);
+                    if (info.isWd) return; // skip withdrawn
+                    jakeDataRows.push([info.car === '' ? '' : (isNaN(info.car) ? info.car : Number(info.car)), info.cat, ...row]);
+                });
+                const jakeDataWs = XLSX.utils.aoa_to_sheet(jakeDataRows);
+                XLSX.utils.book_append_sheet(wb, jakeDataWs, 'Jake Data');
 
                 // ===== SHEET 8: MA Licence Checks =====
                 {
