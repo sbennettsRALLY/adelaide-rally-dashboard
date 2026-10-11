@@ -1454,7 +1454,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.25';
+        const DASHBOARD_VERSION = 'v4.26';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -6955,10 +6955,7 @@
                         if (!assign || !assign.entryId) return;
                         const rsRow = _rsGetRow(assign.entryId);
                         const rsCat = slot.category || '';
-                        if (_rsIsExcluded(rsCat)) {
-                            rsExportData.push([slot.carNum, rsCat, _rsVal(rsRow,'first / last name-first'), _rsVal(rsRow,'first / last name-last'), 'AUS', _rsVal(rsRow,"navigator's name",'first'), _rsVal(rsRow,"navigator's name",'last'), 'AUS', _rsVal(rsRow,'vehicle make'), _rsVal(rsRow,'vehicle model'), '', '', 'RallySafe', 'NA']);
-                            return;
-                        }
+                        if (_rsIsExcluded(rsCat)) return; // skip non-RallySafe categories
                         rsExportData.push([
                             slot.carNum,
                             rsCat,
@@ -7839,7 +7836,7 @@
             const stats = document.getElementById('rsStats');
             if (!body) return;
 
-            let totalWithDriver = 0, withCode = 0, missingCode = 0, noCodeNeeded = 0;
+            let totalWithDriver = 0, withCode = 0, missingCode = 0;
             const rows = [];
 
             slots.forEach(slot => {
@@ -7858,22 +7855,7 @@
                 const hasDriver = !!(drvFirst || drvLast || assign);
 
                 if (excluded) {
-                    // Non-RallySafe category — show as N/A (green/complete)
-                    if (hasDriver) noCodeNeeded++;
-                    const naStatus = '<span style="background:#16A34A;color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✓ N/A</span>';
-                    rows.push(`<tr style="opacity:0.75;">
-                        <td style="font-weight:600;">${slot.carNum}</td>
-                        <td>${category}</td>
-                        <td>${drvFirst ? drvFirst + ' ' + drvLast : (assign ? assign.driverName || '' : '<em style="color:#9CA3AF;">—</em>')}</td>
-                        <td>AUS</td>
-                        <td>${navFirst ? navFirst + ' ' + navLast : '<em style="color:#9CA3AF;">—</em>'}</td>
-                        <td>AUS</td>
-                        <td>${make || '<em style="color:#9CA3AF;">—</em>'}</td>
-                        <td>${model || '<em style="color:#9CA3AF;">—</em>'}</td>
-                        <td>RallySafe</td>
-                        <td style="color:#6B7280;">NA</td>
-                        <td>${naStatus}</td>
-                    </tr>`);
+                    // Non-RallySafe category — skip entirely
                     return;
                 }
 
@@ -7908,10 +7890,9 @@
 
             // Stats chips
             stats.innerHTML = [
-                ['Total Cars', slots.length, '#1e3a5f'],
+                ['Total Cars', rows.length, '#1e3a5f'],
                 ['Codes Issued', withCode, '#16A34A'],
                 ['Missing Code', missingCode, '#DC2626'],
-                ['No Code Needed', noCodeNeeded, '#6B7280'],
             ].map(([label, val, color]) =>
                 `<div style="background:${color};color:#fff;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:default;">
                     ${label}: ${val}
