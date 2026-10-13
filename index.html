@@ -1457,6 +1457,7 @@
                             <th style="padding:6px 8px;">Car Model</th>
                             <th style="padding:6px 8px;">Car Colour</th>
                             <th style="padding:6px 8px;">Car CC</th>
+                            <th style="padding:6px 8px;">State</th>
                             <th style="padding:6px 8px;">Driver EC</th>
                             <th style="padding:6px 8px;">Nav 1 EC</th>
                             <th style="padding:6px 8px;">Nav 2 EC</th>
@@ -1485,7 +1486,7 @@
             window.open(window.location.href, '_blank');
             window.close();
         }
-        const DASHBOARD_VERSION = 'v4.29';
+        const DASHBOARD_VERSION = 'v4.30';
         // ── MA Licence Rating Table (from MA Licence Table.xlsx) ─────────────────
         // d = driver rating, n = navigator rating
         const MA_LICENCE_RATINGS = {
@@ -7156,7 +7157,7 @@
                         'Nav 1 Email','Nav 1 Phone','Nav 2 Email','Nav 2 Phone',
                         'Nav 3 Email','Nav 3 Phone','Nav 4 Email','Nav 4 Phone',
                         'Nav 5 Email','Nav 5 Phone',
-                        'Car Year','Car Make','Car Model','Car Colour','Car CC',
+                        'Car Year','Car Make','Car Model','Car Colour','Car CC','State',
                         'Driver EC','Nav 1 EC','Nav 2 EC','Nav 3 EC','Nav 4 EC','Nav 5 EC',
                     ];
                     const elData = [elHeaders];
@@ -7177,7 +7178,7 @@
                             n(2)?.email||'', n(2)?.phone||'',
                             n(3)?.email||'', n(3)?.phone||'',
                             n(4)?.email||'', n(4)?.phone||'',
-                            r.carYear, r.carMake, r.carModel, r.carColour, r.carCC,
+                            r.carYear, r.carMake, r.carModel, r.carColour, r.carCC, r.addrState||'',
                             r.drvEC, ne(0), ne(1), ne(2), ne(3), ne(4),
                         ]);
                     });
@@ -8787,6 +8788,7 @@
             const carModelIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle model'));
             const carColourIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('vehicle colour'));
             const carCCIdx     = csvHeaders.findIndex(h => h.toLowerCase().includes('engine capacity'));
+            const addrStateIdx = csvHeaders.findIndex(h => h.toLowerCase().includes('address-') && h.toLowerCase().includes('state'));
 
             // Emergency contacts — match suffix -First / -Last to avoid "First / Last Name-First" matching both
             const ec1FIdx  = csvHeaders.findIndex(h => h.toLowerCase().includes('emergency contact 1') && h.toLowerCase().endsWith('-first'));
@@ -8878,6 +8880,7 @@
                     carModel:    _getVal(driverRow, carModelIdx),
                     carColour:   _getVal(driverRow, carColourIdx),
                     carCC:       _getVal(driverRow, carCCIdx),
+                    addrState:   _getVal(driverRow, addrStateIdx),
                     drvEC,
                 });
             });
@@ -8943,6 +8946,7 @@
                     cell(n(3)?.email||'') + cell(n(3)?.phone||'') +
                     cell(n(4)?.email||'') + cell(n(4)?.phone||'') +
                     cell(r.carYear) + cell(r.carMake) + cell(r.carModel) + cell(r.carColour) + cell(r.carCC) +
+                    cell(r.addrState) +
                     cell(r.drvEC) + cell(ne(0)) + cell(ne(1)) + cell(ne(2)) + cell(ne(3)) + cell(ne(4));
                 tbody.appendChild(tr);
                 shown++;
@@ -8973,7 +8977,7 @@
                 'Nav 1 Email','Nav 1 Phone','Nav 2 Email','Nav 2 Phone',
                 'Nav 3 Email','Nav 3 Phone','Nav 4 Email','Nav 4 Phone',
                 'Nav 5 Email','Nav 5 Phone',
-                'Car Year','Car Make','Car Model','Car Colour','Car CC',
+                'Car Year','Car Make','Car Model','Car Colour','Car CC','State',
                 'Driver EC','Nav 1 EC','Nav 2 EC','Nav 3 EC','Nav 4 EC','Nav 5 EC',
             ];
             const data = [headers];
@@ -8994,7 +8998,7 @@
                     n(2)?.email||'', n(2)?.phone||'',
                     n(3)?.email||'', n(3)?.phone||'',
                     n(4)?.email||'', n(4)?.phone||'',
-                    r.carYear, r.carMake, r.carModel, r.carColour, r.carCC,
+                    r.carYear, r.carMake, r.carModel, r.carColour, r.carCC, r.addrState||'',
                     r.drvEC, ne(0), ne(1), ne(2), ne(3), ne(4),
                 ]);
             });
